@@ -765,6 +765,37 @@ def cmd_stats(args) -> int:
     return 0
 
 
+def cmd_add(args) -> int:
+    from jobpilot.core.http import PoliteClient
+    from jobpilot.onboarding.profile import load_profile
+    from jobpilot.review import plan
+    from jobpilot.settings import load_settings
+    from jobpilot.sources.link import LinkError, add_link
+
+    paths = get_paths(args.home)
+    s = load_settings(paths.settings)
+    http = PoliteClient(s.user_agent, s.min_seconds_between_requests, s.request_timeout_seconds)
+    try:
+        with db.connect(paths.db) as conn:
+            try:
+                with conn:
+                    job_id, new = add_link(conn, http, args.url, title=args.title or "", company=args.company or "",
+                                           location=args.location or "")
+            except LinkError as exc:
+                print(exc, file=sys.stderr)
+                return 1
+            job = conn.execute("SELECT title, company FROM jobs WHERE id = ?", (job_id,)).fetchone()
+            profile = load_profile(paths.profile)
+            if new and profile is not None:
+                with conn:
+                    plan.prepare(conn, job_id, profile)
+    finally:
+        http.close()
+    print(f"{'Added' if new else 'Already saved'}: job {job_id}, {job['title']} at {job['company']}.")
+    print(f"Review it in the dashboard (jobpilot dashboard) or run `jobpilot match` to score it.")
+    return 0
+
+
 def cmd_export(args) -> int:
     from jobpilot.review import export
 
@@ -955,6 +986,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     stt = sub.add_parser("stats", help="response, interview and offer rates, and what's working")
     stt.set_defaults(func=cmd_stats)
+
+    ad = sub.add_parser("add", help="add a job from a link you found")
+    ad.add_argument("url")
+    ad.add_argument("--title", help="job title (needed for sites other than Greenhouse, Lever, Ashby)")
+    ad.add_argument("--company", help="company (needed for sites other than Greenhouse, Lever, Ashby)")
+    ad.add_argument("--location")
+    ad.set_defaults(func=cmd_add)
 
     tl = sub.add_parser("tailor", help="suggest a resume version reordered for one job (you approve the diff)")
     tl.add_argument("id", type=int)
