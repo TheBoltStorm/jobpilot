@@ -1,0 +1,242 @@
+# Skill list used by the local matcher. Edit or extend freely.
+#
+# key:
+#   name:      display name
+#   cat:       category (shown in the gap report)
+#   aliases:   case-insensitive phrases matched on word boundaries
+#   patterns:  optional case-SENSITIVE regexes, for short or ambiguous names (C, R, Go)
+#   family:    skills in the same family give partial credit for each other
+#   implies:   having this skill also shows you have these (PostgreSQL -> SQL)
+#   learn:     a suggested way to learn it (free resource + a small project idea)
+
+# ---------------------------------------------------------------- languages
+python: {name: Python, cat: Languages, aliases: [python, python3], family: scripting,
+  learn: "Python's official tutorial or CS50P (free). Project: a CLI tool that cleans and summarizes a CSV."}
+java: {name: Java, cat: Languages, aliases: [java], family: jvm,
+  learn: "University of Helsinki's free Java MOOC. Project: a REST API with Spring Boot."}
+javascript: {name: JavaScript, cat: Languages, aliases: [javascript, js, es6, ecmascript], family: web_lang,
+  learn: "The Odin Project or javascript.info (free). Project: an interactive to-do app with local storage."}
+typescript: {name: TypeScript, cat: Languages, aliases: [typescript], family: web_lang, implies: [javascript],
+  learn: "The TypeScript Handbook. Project: convert one of your JS projects to strict TypeScript."}
+cpp: {name: C++, cat: Languages, aliases: ["c++", cpp, "c/c++"], family: c_family,
+  learn: "learncpp.com (free). Project: implement a small hash map and benchmark it."}
+c: {name: C, cat: Languages, patterns: ['(?<![\w+#./-])(?<!Series )(?<!Vitamin )(?<!Type )C(?![\w+#-])(?!\s*\+\+)', '\bC/C\+\+'], family: c_family,
+  learn: "CS50's C weeks or 'Beej's Guide to C'. Project: a tiny shell or memory allocator."}
+csharp: {name: "C#", cat: Languages, aliases: ["c#", csharp, ".net", dotnet], family: jvm,
+  learn: "Microsoft Learn's free C# path. Project: a small ASP.NET Core API."}
+go: {name: Go, cat: Languages, aliases: [golang], patterns: ['\bGo\b(?![-\s]+(?:to|above|beyond|live|further|forward|back)\b)(?!-)'], family: systems_lang,
+  learn: "A Tour of Go + Go by Example. Project: a concurrent web crawler with goroutines."}
+rust: {name: Rust, cat: Languages, aliases: [rust], family: systems_lang,
+  learn: "The Rust Book (free). Project: a command-line grep clone."}
+kotlin: {name: Kotlin, cat: Languages, aliases: [kotlin], family: jvm,
+  learn: "Kotlin Koans + Android Basics with Compose. Project: a simple Android app."}
+swift: {name: Swift, cat: Languages, aliases: [swift, swiftui], family: mobile_lang,
+  learn: "Apple's Swift tutorials / 100 Days of SwiftUI. Project: a small iOS app."}
+scala: {name: Scala, cat: Languages, aliases: [scala], family: jvm,
+  learn: "Scala's official tour. Project: a Spark job written in Scala."}
+r: {name: R, cat: Languages, patterns: ['(?<![\w&./-])R(?![\w&+#-])'], aliases: [rstudio, tidyverse], family: scripting,
+  learn: "R for Data Science (free online book). Project: an exploratory analysis of a public dataset."}
+sql: {name: SQL, cat: Data, aliases: [sql], family: sql,
+  learn: "SQLBolt or Mode's SQL tutorial (free). Project: answer 10 questions about a public dataset in SQL."}
+bash: {name: Bash/Shell, cat: Tools, aliases: [bash, shell scripting, shell scripts, zsh], family: scripting,
+  learn: "The Missing Semester (MIT, free). Project: automate a chore on your machine with a script."}
+matlab: {name: MATLAB, cat: Engineering, aliases: [matlab], family: scientific,
+  learn: "MATLAB Onramp (free from MathWorks). Project: simulate and plot a control system."}
+verilog: {name: Verilog/SystemVerilog, cat: Hardware, aliases: [verilog, systemverilog], family: hdl,
+  learn: "HDLBits (free practice). Project: a UART or simple CPU on an FPGA simulator."}
+vhdl: {name: VHDL, cat: Hardware, aliases: [vhdl], family: hdl,
+  learn: "nandland's VHDL tutorials. Project: a traffic-light state machine."}
+php: {name: PHP, cat: Languages, aliases: [php, laravel], family: web_lang,
+  learn: "PHP: The Right Way. Project: a small Laravel CRUD app."}
+ruby: {name: Ruby, cat: Languages, aliases: [ruby, rails, ruby on rails], family: scripting,
+  learn: "The Odin Project's Ruby path. Project: a Rails blog."}
+
+# ---------------------------------------------------------------- web / backend
+react: {name: React, cat: Frontend, aliases: [react, reactjs, react.js], family: frontend_fw, implies: [javascript],
+  learn: "react.dev's official tutorial. Project: a dashboard that pulls from a public API."}
+nextjs: {name: Next.js, cat: Frontend, aliases: [next.js, nextjs], family: frontend_fw, implies: [react],
+  learn: "Next.js Learn course (free). Project: deploy a full-stack app on a free hosting tier."}
+vue: {name: Vue, cat: Frontend, aliases: [vue, vue.js, vuejs, nuxt], family: frontend_fw,
+  learn: "Vue's official tutorial. Project: rebuild a small React app in Vue."}
+angular: {name: Angular, cat: Frontend, aliases: [angular, angularjs], family: frontend_fw,
+  learn: "Angular's official tutorial (Tour of Heroes). Project: a form-heavy CRUD app."}
+html_css: {name: HTML/CSS, cat: Frontend, aliases: [html, css, html5, css3, tailwind, sass], family: web_basics,
+  learn: "freeCodeCamp Responsive Web Design. Project: a personal portfolio site."}
+nodejs: {name: Node.js, cat: Backend, aliases: [node.js, nodejs, express.js, expressjs], family: backend_fw, implies: [javascript],
+  learn: "The Odin Project's Node path. Project: a REST API with Express and a database."}
+django: {name: Django, cat: Backend, aliases: [django], family: backend_fw, implies: [python],
+  learn: "Django's official polls tutorial. Project: a small web app with user accounts."}
+flask: {name: Flask, cat: Backend, aliases: [flask], family: backend_fw, implies: [python],
+  learn: "Flask's official tutorial. Project: a JSON API for a hobby dataset."}
+fastapi: {name: FastAPI, cat: Backend, aliases: [fastapi], family: backend_fw, implies: [python],
+  learn: "FastAPI's official tutorial. Project: an API with auth and tests."}
+spring: {name: Spring Boot, cat: Backend, aliases: [spring boot, spring framework, springboot], family: backend_fw, implies: [java],
+  learn: "spring.io guides. Project: a REST service backed by PostgreSQL."}
+rest: {name: REST APIs, cat: Backend, aliases: [restful, rest api, rest apis, restful apis, web apis, api design], family: api,
+  learn: "Read a well-designed public API's docs (e.g. Stripe's), then design and build one of your own."}
+graphql: {name: GraphQL, cat: Backend, aliases: [graphql], family: api,
+  learn: "graphql.org/learn. Project: add a GraphQL layer over an existing REST API."}
+grpc: {name: gRPC, cat: Backend, aliases: [grpc, protobuf, protocol buffers], family: api,
+  learn: "grpc.io quick start. Project: two small services that talk over gRPC."}
+microservices: {name: Microservices, cat: Backend, aliases: [microservices, microservice, service-oriented architecture], family: architecture,
+  learn: "Split a monolith side project into two services with a queue between them."}
+
+# ---------------------------------------------------------------- data stores
+postgresql: {name: PostgreSQL, cat: Data, aliases: [postgresql, postgres], family: sql_db, implies: [sql],
+  learn: "PostgreSQL tutorial at postgresqltutorial.com. Project: model and query a small app's data."}
+mysql: {name: MySQL, cat: Data, aliases: [mysql, mariadb], family: sql_db, implies: [sql],
+  learn: "MySQL's getting-started docs. Project: same as PostgreSQL, compare the two."}
+sqlite: {name: SQLite, cat: Data, aliases: [sqlite], family: sql_db, implies: [sql],
+  learn: "sqlite.org docs. Project: an offline-first app using SQLite."}
+mongodb: {name: MongoDB, cat: Data, aliases: [mongodb, mongo], family: nosql,
+  learn: "MongoDB University (free). Project: store and query JSON documents from an API."}
+redis: {name: Redis, cat: Data, aliases: [redis], family: nosql,
+  learn: "Redis University (free). Project: add caching and rate limiting to an API."}
+dynamodb: {name: DynamoDB, cat: Data, aliases: [dynamodb], family: nosql,
+  learn: "AWS DynamoDB developer guide. Project: a serverless app on the AWS free tier."}
+cassandra: {name: Cassandra, cat: Data, aliases: [cassandra, scylladb], family: nosql,
+  learn: "DataStax Academy (free). Project: model a time-series workload."}
+elasticsearch: {name: Elasticsearch, cat: Data, aliases: [elasticsearch, opensearch, elk], family: search,
+  learn: "Elastic's getting-started guide. Project: full-text search over a document set."}
+snowflake: {name: Snowflake, cat: Data, aliases: [snowflake], family: warehouse, implies: [sql],
+  learn: "Snowflake's free trial + Hands-On Essentials. Project: load and model a public dataset."}
+bigquery: {name: BigQuery, cat: Data, aliases: [bigquery], family: warehouse, implies: [sql],
+  learn: "BigQuery sandbox (free) with public datasets. Project: a small analytics report."}
+
+# ---------------------------------------------------------------- data / ML
+pandas: {name: pandas, cat: Data, aliases: [pandas], family: dataframe, implies: [python],
+  learn: "Kaggle Learn's Pandas course (free). Project: clean and analyze a messy dataset."}
+numpy: {name: NumPy, cat: Data, aliases: [numpy], family: dataframe, implies: [python],
+  learn: "NumPy's absolute-beginners guide. Project: implement linear regression from scratch."}
+spark: {name: Spark, cat: Data, aliases: [pyspark, apache spark, spark sql, databricks], patterns: ['\bSpark\b'], family: big_data,
+  learn: "Databricks Community Edition (free). Project: process a multi-GB public dataset."}
+airflow: {name: Airflow, cat: Data, aliases: [airflow, apache airflow, dagster, prefect], family: orchestration,
+  learn: "Airflow's tutorial. Project: a daily pipeline that pulls an API into a database."}
+dbt: {name: dbt, cat: Data, aliases: [dbt], family: orchestration, implies: [sql],
+  learn: "dbt Fundamentals course (free). Project: model a public dataset with tests."}
+kafka: {name: Kafka, cat: Data, aliases: [kafka, apache kafka, kinesis, pub/sub, rabbitmq], family: streaming,
+  learn: "Confluent Developer courses (free). Project: a producer/consumer that processes live events."}
+etl: {name: ETL/Data pipelines, cat: Data, aliases: [etl, elt, data pipeline, data pipelines], family: orchestration,
+  learn: "Build one: pull from a public API daily, transform it, load it into PostgreSQL."}
+tableau: {name: Tableau/BI tools, cat: Data, aliases: [tableau, power bi, powerbi, looker], family: bi,
+  learn: "Tableau Public (free). Project: a public dashboard from an open dataset."}
+excel: {name: Excel, cat: Data, aliases: [microsoft excel, spreadsheets, google sheets], patterns: ['\bExcel\b'], family: bi,
+  learn: "Microsoft's Excel training. Project: a model with pivot tables and lookups."}
+statistics: {name: Statistics, cat: Math, aliases: [statistics, statistical, statistical analysis, statistical modeling, hypothesis testing, regression analysis], family: math_stats,
+  learn: "Khan Academy Statistics or 'OpenIntro Statistics' (free). Project: a written analysis with confidence intervals."}
+probability: {name: Probability, cat: Math, aliases: [probability, stochastic, stochastic calculus], family: math_stats,
+  learn: "Harvard Stat 110 (free lectures). Project: Monte Carlo simulations of a few puzzles."}
+linear_algebra: {name: Linear algebra, cat: Math, aliases: [linear algebra], family: math_stats,
+  learn: "3Blue1Brown's Essence of Linear Algebra + MIT 18.06 (free)."}
+ab_testing: {name: A/B testing, cat: Data, aliases: [a/b testing, ab testing, experimentation, a/b tests], family: math_stats,
+  learn: "Udacity's free A/B Testing course. Project: analyze a public experiment dataset."}
+data_viz: {name: Data visualization, cat: Data, aliases: [data visualization, matplotlib, seaborn, plotly, d3, d3.js], family: bi,
+  learn: "Storytelling with Data examples + matplotlib/seaborn docs. Project: a 5-chart report."}
+machine_learning: {name: Machine learning, cat: ML, aliases: [machine learning, ml models, ml model, predictive modeling, supervised learning], family: ml,
+  learn: "Andrew Ng's Machine Learning Specialization (free to audit). Project: an end-to-end model on a Kaggle dataset."}
+deep_learning: {name: Deep learning, cat: ML, aliases: [deep learning, neural networks, neural network, transformers], family: ml,
+  learn: "fast.ai Practical Deep Learning (free). Project: fine-tune an image or text classifier."}
+scikit_learn: {name: scikit-learn, cat: ML, aliases: [scikit-learn, sklearn, scikit learn, xgboost, lightgbm], family: ml_lib, implies: [machine_learning, python],
+  learn: "scikit-learn's user guide tutorials. Project: compare 3 models with cross-validation."}
+pytorch: {name: PyTorch, cat: ML, aliases: [pytorch, torch], family: dl_framework, implies: [deep_learning, python],
+  learn: "PyTorch's 60-minute blitz + fast.ai. Project: train a CNN from scratch."}
+tensorflow: {name: TensorFlow/Keras, cat: ML, aliases: [tensorflow, keras, tf.keras], family: dl_framework, implies: [deep_learning, python],
+  learn: "TensorFlow tutorials. Project: same CNN as above, compare frameworks."}
+jax: {name: JAX, cat: ML, aliases: [jax], family: dl_framework, implies: [deep_learning],
+  learn: "JAX's quickstart. Project: implement a small MLP with jax.grad."}
+nlp: {name: NLP, cat: ML, aliases: [nlp, natural language processing, text classification, hugging face, huggingface], family: ml_domain,
+  learn: "Hugging Face's free NLP course. Project: fine-tune a small model on a text dataset."}
+llm: {name: LLMs, cat: ML, aliases: [llm, llms, large language models, large language model, generative ai, genai, rag, prompt engineering], family: ml_domain,
+  learn: "Build a small retrieval-augmented app over your own notes; read the model provider's docs."}
+computer_vision: {name: Computer vision, cat: ML, aliases: [computer vision, opencv, image processing, object detection], family: ml_domain,
+  learn: "OpenCV tutorials + fast.ai lesson 1. Project: an object detector on your own photos."}
+reinforcement_learning: {name: Reinforcement learning, cat: ML, aliases: [reinforcement learning], family: ml_domain,
+  learn: "Hugging Face Deep RL course (free). Project: train an agent in a Gymnasium environment."}
+mlops: {name: MLOps, cat: ML, aliases: [mlops, mlflow, model deployment, kubeflow, sagemaker], family: ml_ops,
+  learn: "Made With ML's MLOps course (free). Project: serve a model behind an API with monitoring."}
+
+# ---------------------------------------------------------------- cloud / devops
+aws: {name: AWS, cat: Cloud, aliases: [aws, amazon web services, ec2, aws lambda], family: cloud,
+  learn: "AWS Skill Builder's free Cloud Practitioner Essentials. Project: deploy an app on the free tier."}
+gcp: {name: Google Cloud, cat: Cloud, aliases: [gcp, google cloud, google cloud platform], family: cloud,
+  learn: "Google Cloud Skills Boost free labs. Project: deploy a container to Cloud Run."}
+azure: {name: Azure, cat: Cloud, aliases: [azure, microsoft azure], family: cloud,
+  learn: "Microsoft Learn AZ-900 path (free). Project: host a web app on Azure App Service."}
+docker: {name: Docker, cat: DevOps, aliases: [docker, containers, containerization, dockerfile], family: containers,
+  learn: "Docker's official Get Started guide. Project: containerize one of your apps."}
+kubernetes: {name: Kubernetes, cat: DevOps, aliases: [kubernetes, k8s, helm, eks, gke], family: containers, implies: [docker],
+  learn: "Kubernetes Basics tutorial + minikube. Project: deploy a 2-service app locally."}
+terraform: {name: Terraform/IaC, cat: DevOps, aliases: [terraform, infrastructure as code, cloudformation, pulumi], family: iac,
+  learn: "HashiCorp's Terraform tutorials. Project: define your side project's cloud setup in code."}
+ci_cd: {name: CI/CD, cat: DevOps, aliases: [ci/cd, ci cd, continuous integration, continuous delivery, continuous deployment, github actions, jenkins, gitlab ci, circleci], family: ci,
+  learn: "GitHub Actions docs. Project: add tests + automatic deploys to a repo."}
+linux: {name: Linux, cat: Tools, aliases: [linux, unix, ubuntu], family: os_tools,
+  learn: "The Missing Semester (MIT, free) + Linux Journey. Project: run your side project on a Linux VM."}
+git: {name: Git, cat: Tools, aliases: [git, github, gitlab, version control, bitbucket], family: vcs,
+  learn: "Pro Git book (free) + Learn Git Branching. Project: contribute a small fix to an open-source repo."}
+observability: {name: Monitoring/Observability, cat: DevOps, aliases: [observability, prometheus, grafana, datadog, opentelemetry, splunk], family: ops,
+  learn: "Prometheus + Grafana getting-started guides. Project: add metrics and a dashboard to an app."}
+
+# ---------------------------------------------------------------- CS fundamentals
+data_structures: {name: Data structures, cat: CS fundamentals, aliases: [data structures, data structure], family: cs_core,
+  learn: "NeetCode roadmap or MIT 6.006 (free). Practice ~50 problems across arrays, trees, graphs."}
+algorithms: {name: Algorithms, cat: CS fundamentals, aliases: [algorithms, algorithm design, algorithmic], family: cs_core,
+  learn: "MIT 6.006 or Princeton's Algorithms on Coursera (free). Practice weekly on LeetCode."}
+oop: {name: Object-oriented programming, cat: CS fundamentals, aliases: [object-oriented, object oriented, oop, design patterns], family: cs_core,
+  learn: "Refactoring Guru's design patterns (free). Project: refactor a script into classes with tests."}
+distributed_systems: {name: Distributed systems, cat: CS fundamentals, aliases: [distributed systems, distributed system, distributed computing, scalability, high availability], family: architecture,
+  learn: "MIT 6.5840 (formerly 6.824) lectures + 'Designing Data-Intensive Applications'. Project: a replicated key-value store."}
+system_design: {name: System design, cat: CS fundamentals, aliases: [system design, systems design, software architecture], family: architecture,
+  learn: "The System Design Primer (GitHub, free). Practice: write up designs for 3 familiar apps."}
+operating_systems: {name: Operating systems, cat: CS fundamentals, aliases: [operating systems, operating system, os internals, kernel], family: systems,
+  learn: "OSTEP (free textbook) + xv6 labs. Project: a small scheduler or file system."}
+networking: {name: Networking, cat: CS fundamentals, aliases: [tcp/ip, computer networks, computer networking, network protocols, network programming], family: systems,
+  learn: "Computer Networking: A Top-Down Approach + Beej's network programming guide. Project: a simple HTTP server."}
+concurrency: {name: Concurrency, cat: CS fundamentals, aliases: [concurrency, multithreading, multi-threaded, parallel programming, asynchronous programming], family: systems,
+  learn: "Read your language's concurrency docs; project: a parallel downloader with a worker pool."}
+testing: {name: Software testing, cat: CS fundamentals, aliases: [unit testing, unit tests, testing frameworks, test-driven, tdd, pytest, junit, jest, integration tests, automated testing], family: quality,
+  learn: "Add a real test suite to a side project and run it in CI."}
+security_fundamentals: {name: Security fundamentals, cat: Security, aliases: [cybersecurity, information security, infosec, application security, appsec, owasp, threat modeling, vulnerability], family: security,
+  learn: "OWASP Top 10 + PortSwigger Web Security Academy (free). Project: fix the vulns in a deliberately broken app."}
+cryptography: {name: Cryptography, cat: Security, aliases: [cryptography, encryption, pki, tls], family: security,
+  learn: "Dan Boneh's Cryptography I (free to audit). Project: the Cryptopals challenges."}
+compilers: {name: Compilers, cat: CS fundamentals, aliases: [compilers, compiler, llvm], family: systems,
+  learn: "'Crafting Interpreters' (free online). Project: build its tree-walk interpreter."}
+mobile: {name: Mobile development, cat: Frontend, aliases: [mobile development, ios, android, react native, flutter], family: mobile_lang,
+  learn: "Android Basics with Compose or 100 Days of SwiftUI. Project: publish a small app to a test track."}
+
+# ---------------------------------------------------------------- hardware / engineering
+embedded: {name: Embedded systems, cat: Hardware, aliases: [embedded systems, embedded software, embedded c, microcontrollers, microcontroller, arduino, stm32, rtos, firmware], family: embedded,
+  learn: "Build with an Arduino or STM32 board; follow 'Making Embedded Systems'. Project: a sensor logger."}
+fpga: {name: FPGA, cat: Hardware, aliases: [fpga, fpgas, vivado, quartus], family: hdl,
+  learn: "HDLBits + a cheap FPGA dev board. Project: VGA output or a soft CPU."}
+pcb: {name: PCB design, cat: Hardware, aliases: [pcb, pcb design, altium, kicad, schematic capture], family: electrical,
+  learn: "KiCad's getting-started guide (free). Project: design and order a small PCB."}
+circuits: {name: Circuit design, cat: Hardware, aliases: [circuit design, analog circuits, digital circuits, circuit analysis, spice, ltspice, oscilloscope], family: electrical,
+  learn: "MIT 6.002 (free) + LTspice. Project: design and simulate an amplifier."}
+signal_processing: {name: Signal processing, cat: Engineering, aliases: [signal processing, dsp, digital signal processing], family: scientific,
+  learn: "'Think DSP' (free book). Project: filter and analyze audio recordings."}
+cad: {name: CAD, cat: Engineering, aliases: [cad, solidworks, autocad, fusion 360, catia, siemens nx, creo, onshape], family: mechanical,
+  learn: "Onshape or Fusion 360 free tutorials. Project: model and 3D-print a part."}
+controls: {name: Control systems, cat: Engineering, aliases: [control systems, control theory, pid control, simulink], family: scientific,
+  learn: "Brian Douglas's control-systems videos + MATLAB Onramp. Project: tune a PID controller in simulation."}
+robotics: {name: Robotics, cat: Engineering, aliases: [robotics, ros, ros2, slam, motion planning], family: robotics,
+  learn: "ROS 2 tutorials. Project: simulate a robot that navigates a map."}
+computer_architecture: {name: Computer architecture, cat: Hardware, aliases: [computer architecture, cpu architecture, risc-v, arm architecture, cache coherence], family: systems,
+  learn: "Nand2Tetris (free) + Patterson & Hennessy. Project: a pipelined CPU in an HDL simulator."}
+
+# ---------------------------------------------------------------- product / design / quant
+figma: {name: Figma, cat: Design, aliases: [figma, sketch, adobe xd], family: design_tools,
+  learn: "Figma's free YouTube courses. Project: redesign an app screen and prototype it."}
+ux_research: {name: UX research, cat: Design, aliases: [user research, ux research, usability testing, user interviews], family: design,
+  learn: "Google UX Design Certificate (free to audit). Project: run 5 usability tests on a real app."}
+product_sense: {name: Product management, cat: Product, aliases: [product management, product roadmap, roadmapping, product strategy, prd, product requirements], family: product,
+  learn: "Lenny's Newsletter + 'Inspired'. Project: write a PRD for a feature you'd add to an app you use."}
+agile: {name: Agile/Scrum, cat: Product, aliases: [agile, scrum, kanban, jira], family: process,
+  learn: "The Scrum Guide (free, short). Practice: run your next group project with sprints."}
+quant_trading: {name: Trading/markets knowledge, cat: Quant, aliases: [trading, market making, derivatives, options pricing, financial markets, quantitative finance], family: quant,
+  learn: "'Options, Futures, and Other Derivatives' (Hull) + Jane Street's puzzle archive. Project: backtest a simple strategy."}
+time_series: {name: Time series analysis, cat: Math, aliases: [time series, time-series, forecasting], family: math_stats,
+  learn: "'Forecasting: Principles and Practice' (free online). Project: forecast a public dataset."}
+optimization: {name: Optimization, cat: Math, aliases: [convex optimization, mathematical optimization, linear programming, operations research], family: math_stats,
+  learn: "Stanford's Convex Optimization (free lectures). Project: solve a scheduling problem with an LP solver."}

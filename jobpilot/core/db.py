@@ -75,6 +75,38 @@ MIGRATIONS: list[str] = [
         error       TEXT
     );
     """,
+    # v3: description enrichment, match results, scoring runs
+    """
+    ALTER TABLE jobs ADD COLUMN enrich_status TEXT NOT NULL DEFAULT '';
+
+    CREATE TABLE matches (
+        job_id         INTEGER PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
+        score          INTEGER NOT NULL,
+        confidence     TEXT NOT NULL,          -- high | medium | low
+        reason         TEXT NOT NULL,
+        tags           TEXT NOT NULL DEFAULT '',  -- field tags, comma-separated
+        skills_json    TEXT NOT NULL,          -- {"required": [...], "preferred": [...], "have": [...], ...}
+        engine         TEXT NOT NULL,          -- local | claude:<model>
+        profile_hash   TEXT NOT NULL,
+        description_len INTEGER NOT NULL,
+        scored_at      TEXT NOT NULL
+    );
+    CREATE INDEX matches_score ON matches(score);
+
+    CREATE TABLE match_runs (
+        id             INTEGER PRIMARY KEY,
+        engine         TEXT NOT NULL,
+        started_at     TEXT NOT NULL,
+        finished_at    TEXT,
+        jobs_scored    INTEGER NOT NULL DEFAULT 0,
+        input_tokens   INTEGER NOT NULL DEFAULT 0,
+        output_tokens  INTEGER NOT NULL DEFAULT 0,
+        cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+        cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+        cost_usd       REAL NOT NULL DEFAULT 0,
+        error          TEXT
+    );
+    """,
 ]
 
 

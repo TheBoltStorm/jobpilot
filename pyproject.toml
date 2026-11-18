@@ -19,6 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "fpdf2>=2.7"]
+claude = ["anthropic>=2.0,<3"]
 
 [project.scripts]
 jobpilot = "jobpilot.cli:main"
@@ -28,6 +29,7 @@ include = ["jobpilot*"]
 
 [tool.setuptools.package-data]
 "jobpilot.sources" = ["data/*.yaml"]
+"jobpilot.matching" = ["data/*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -55,6 +55,16 @@ class Sources(BaseModel):
     rss: RSSSettings = Field(default_factory=RSSSettings)
 
 
+class MatchingSettings(BaseModel):
+    engine: str = "local"  # local (free, offline) | claude (needs ANTHROPIC_API_KEY)
+    min_score: int = 50  # jobs at or above this move to "matched"
+    claude_model: str = "claude-haiku-5-5"
+    claude_concurrency: int = 4
+    claude_max_jobs_per_run: int = 200
+    claude_spend_cap_usd: float = 1.00  # stop a run once estimated cost reaches this
+    enrich_per_run: int = 300  # descriptions to fetch per `jobpilot enrich`
+
+
 class Settings(BaseModel):
     user_agent: str = "JobPilot/0.1 (personal job search assistant; respects robots.txt)"
     min_seconds_between_requests: float = 1.0  # per host; robots.txt Crawl-delay wins if larger
@@ -62,6 +72,7 @@ class Settings(BaseModel):
     max_age_days: int = 60  # skip postings older than this (when the source gives a date)
     filter_by_profile: bool = True  # only keep jobs matching your role types / fields
     sources: Sources = Field(default_factory=Sources)
+    matching: MatchingSettings = Field(default_factory=MatchingSettings)
 
 
 HEADER = "# JobPilot settings. Safe to edit; delete the file to reset to defaults.\n\n"

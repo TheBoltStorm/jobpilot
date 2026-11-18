@@ -16,7 +16,8 @@ FIELD_TAGS: dict[str, list[str]] = {
                  "fpga", "asic", "chip", "semiconductor"],
     "quant": ["quant", "quantitative", "trading", "trader", "finance", "fintech"],
     "security": ["security", "cybersecurity", "infosec", "appsec"],
-    "design": ["design", "ux", "ui", "user experience", "product design", "graphic"],
+    "design": ["designer", "ux", "ui", "user experience", "product design", "graphic design", "visual design",
+               "interaction design"],
 }
 
 # How the GitHub lists' "category" values map onto tags.

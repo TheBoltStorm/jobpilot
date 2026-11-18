@@ -13,8 +13,8 @@ All personal data stays on your machine, in `data/` (gitignored).
 |---|---|---|
 | 1 | Onboarding + resume parsing | ✅ done |
 | 2 | Job discovery sources + dedupe | ✅ done |
-| 3 | Matching + skill-gap report | next (works without an API key; see below) |
-| 4 | Review dashboard | planned |
+| 3 | Matching + skill-gap report | ✅ done (free local engine; Claude optional) |
+| 4 | Review dashboard | next |
 | 5 | Autofill (Greenhouse, dry run) | planned |
 | 6 | Scaling + polish | planned |
 
@@ -67,6 +67,22 @@ To add a source, see [docs/ADDING_A_SOURCE.md](docs/ADDING_A_SOURCE.md).
 Settings (rate limits, max posting age, which lists to read) live in `data/settings.yaml`.
 The companies to check live in `data/companies.yaml`. Both are created on first use and are yours to edit.
 
+## Matching and skill gaps
+
+```bash
+jobpilot enrich             # fetch descriptions the GitHub lists don't include (Greenhouse/Lever/Ashby)
+jobpilot match              # score jobs 0-100 against your profile (free, offline)
+jobpilot matches --with-description --reasons
+jobpilot match show 123     # which skills you have (with the resume line that proves it), partly have, or lack
+jobpilot gaps               # missing skills ranked across matched jobs, by field, with how to learn each
+jobpilot gaps --export gaps.md
+```
+
+Scoring never takes your word for anything the profile doesn't show. A skill counts as "have" only
+when your profile says so, and the breakdown quotes the line. Jobs without a description get a
+low-confidence, title-only estimate. Details, and the optional Claude engine (needs an API key;
+spending is capped and logged), are in [docs/MATCHING.md](docs/MATCHING.md).
+
 ### Commands
 
 | Command | Does |
@@ -81,6 +97,12 @@ The companies to check live in `data/companies.yaml`. Both are created on first 
 | `jobpilot import-csv FILE [--name handshake] [--no-filter]` | Import a CSV you exported. |
 | `jobpilot jobs list [--type internship] [--ats greenhouse] [--search text] [--summary]` | Browse stored jobs. |
 | `jobpilot jobs show ID` | Full details, sources and description for one job. |
+| `jobpilot enrich [--limit N] [--retry-failed]` | Fetch missing descriptions through public ATS APIs. |
+| `jobpilot match [--engine local\|claude] [--rescore] [--limit N]` | Score new or changed jobs. |
+| `jobpilot match show ID` | Score, reason, and skill-by-skill breakdown with evidence. |
+| `jobpilot matches [--min-score N] [--type T] [--location X] [--field F] [--since DATE] [--with-description]` | Filtered list of scored jobs. |
+| `jobpilot gaps [--field F] [--min-score N] [--top N] [--export FILE]` | Skill Gap Report. |
+| `jobpilot runs` | Scoring run log with token cost. |
 
 ## Rules JobPilot follows
 
@@ -97,11 +119,11 @@ The companies to check live in `data/companies.yaml`. Both are created on first 
    No LinkedIn/Indeed scraping.
 6. **Local data.** SQLite + `profile.yaml` under `data/`. Keys only in `.env`.
 
-## Matching without an API key
+## No API key needed
 
-Phase 3 will ship a free local matcher (skill taxonomy + keyword evidence from your resume) as the
-default. If you later add `ANTHROPIC_API_KEY` to `.env`, JobPilot can use Claude (Haiku by default)
-for sharper skill extraction and scoring, with token cost shown per run.
+Everything runs locally and for free by default. If you later add `ANTHROPIC_API_KEY` to `.env`,
+`jobpilot match --engine claude` can use Claude (Haiku by default) for sharper scoring. Each run has
+a spending cap, and token cost is logged per run (see [docs/MATCHING.md](docs/MATCHING.md)).
 
 ## Layout
 
@@ -115,6 +137,8 @@ jobpilot/
   core/http.py           polite HTTP (robots.txt, rate limit, retries)
   core/protected.py      protected-question classifier
   sources/               one module per source + base.py, dedupe.py, companies seed list
+  enrich.py              fetch missing descriptions via public ATS APIs
+  matching/              skills.yaml list, local scorer, optional Claude engine, gap report
   onboarding/
     resume_parser.py     PDF/DOCX -> text -> sections -> structured data (with source lines)
     profile.py           profile.yaml schema (pydantic)

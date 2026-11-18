@@ -250,6 +250,197 @@ def cmd_jobs(args) -> int:
     return 0
 
 
+def cmd_enrich(args) -> int:
+    from jobpilot.enrich import enrich_descriptions
+
+    paths, settings, profile, companies = _discovery_context(args)
+    http, _ = _make_sources(settings, profile, companies, only=["none"])
+    limit = args.limit or settings.matching.enrich_per_run
+    print(f"Fetching up to {limit} missing descriptions from Greenhouse/Lever/Ashby (rate-limited)...")
+    try:
+        with db.connect(paths.db) as conn:
+            s = enrich_descriptions(conn, http, companies, limit=limit, retry_failed=args.retry_failed)
+            left = conn.execute("""SELECT COUNT(*) FROM jobs WHERE description = '' AND enrich_status = ''
+                                   AND status != 'posting_closed' AND ats IN ('greenhouse','lever','ashby')""").fetchone()[0]
+    finally:
+        http.close()
+    print(f"Added {s.filled} descriptions, {s.failed} couldn't be fetched, {http.requests_made} requests. "
+          f"{left} still to fetch" + (" (run again to continue)." if left else "."))
+    for e in s.errors:
+        print(f"  ! {e}")
+    return 0
+
+
+def _profile_or_exit(paths):
+    from jobpilot.onboarding.profile import load_profile
+
+    profile = load_profile(paths.profile)
+    if profile is None:
+        print("No profile yet. Run `jobpilot onboard` first.", file=sys.stderr)
+        raise SystemExit(1)
+    return profile
+
+
+def cmd_match(args) -> int:
+    from jobpilot.matching.engine import run_local
+    from jobpilot.matching.skills import load_taxonomy
+    from jobpilot.settings import load_settings
+
+    paths = get_paths(args.home)
+    settings = load_settings(paths.settings)
+    profile = _profile_or_exit(paths)
+    tax = load_taxonomy(paths.home / "skills.yaml")
+    engine = args.engine or settings.matching.engine
+    with db.connect(paths.db) as conn:
+        if engine == "claude":
+            from jobpilot.matching.claude import run_claude
+
+            try:
+                s = run_claude(conn, profile, tax, settings.matching, rescore=args.rescore, limit=args.limit)
+            except RuntimeError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+        else:
+            s = run_local(conn, profile, tax, settings.matching.min_score, rescore=args.rescore, limit=args.limit)
+        no_desc = conn.execute("""SELECT COUNT(*) FROM matches m JOIN jobs j ON j.id = m.job_id
+                                  WHERE j.description = '' AND j.status IN ('found', 'matched')""").fetchone()[0]
+    cost = f", {s.input_tokens:,} in / {s.output_tokens:,} out tokens, about ${s.cost_usd:.4f}" if engine == "claude" else " (free)"
+    print(f"Scored {s.scored} jobs with the {s.engine} engine{cost}. "
+          f"{s.matched} scored {settings.matching.min_score}+ and are now 'matched'.")
+    if no_desc:
+        print(f"{no_desc} jobs have no description, so their scores are title-only estimates. "
+              "`jobpilot enrich` fetches descriptions where it can.")
+    return 0
+
+
+def _matches_query(args, min_score):
+    where, params = ["m.score >= ?", "j.status NOT IN ('posting_closed', 'rejected')"], [min_score]
+    if args.type:
+        where.append("j.role_type = ?")
+        params.append(args.type)
+    if args.location:
+        where.append("(j.location LIKE ? OR j.remote = ?)")
+        params += [f"%{args.location}%", args.location.lower()]
+    if args.field:
+        where.append("(',' || m.tags || ',') LIKE ?")
+        params.append(f"%,{args.field},%")
+    if args.since:
+        where.append("j.date_posted >= ?")
+        params.append(args.since)
+    if args.search:
+        where.append("(j.title LIKE ? OR j.company LIKE ?)")
+        params += [f"%{args.search}%"] * 2
+    if args.with_description:
+        where.append("j.description != ''")
+    return " AND ".join(where), params
+
+
+def cmd_matches(args) -> int:
+    from jobpilot.settings import load_settings
+
+    paths = get_paths(args.home)
+    settings = load_settings(paths.settings)
+    min_score = settings.matching.min_score if args.min_score is None else args.min_score
+    where, params = _matches_query(args, min_score)
+    with db.connect(paths.db) as conn:
+        rows = conn.execute(
+            f"""SELECT j.id, j.title, j.company, j.location, j.date_posted, m.score, m.confidence, m.reason
+                FROM matches m JOIN jobs j ON j.id = m.job_id WHERE {where}
+                ORDER BY m.score DESC, j.date_posted DESC LIMIT ?""", (*params, args.limit)).fetchall()
+        total = conn.execute(f"SELECT COUNT(*) FROM matches m JOIN jobs j ON j.id = m.job_id WHERE {where}",
+                             params).fetchone()[0]
+    for r in rows:
+        conf = {"high": "", "medium": "~", "low": "?"}[r["confidence"]]
+        print(f"{r['score']:>3}{conf:<1} {r['id']:>6}  {r['company'][:18]:<18}  {r['title'][:44]:<44}  "
+              f"{(r['location'] or '')[:20]:<20} {r['date_posted'] or ''}")
+        if args.reasons:
+            print(f"            {r['reason']}")
+    print(f"\n{len(rows)} of {total} jobs scoring {min_score}+.  ~ = medium confidence, ? = low (no description).")
+    print("`jobpilot match show <id>` shows the skill breakdown for one job.")
+    return 0
+
+
+def cmd_match_show(args) -> int:
+    paths = get_paths(args.home)
+    with db.connect(paths.db) as conn:
+        r = conn.execute("""SELECT j.*, m.score, m.confidence, m.reason, m.skills_json, m.engine
+                            FROM jobs j JOIN matches m ON m.job_id = j.id WHERE j.id = ?""", (args.id,)).fetchone()
+    if not r:
+        print("No score for that job yet. Run `jobpilot match`.", file=sys.stderr)
+        return 1
+    print(f"{r['title']} - {r['company']} ({r['location'] or 'location unknown'})")
+    print(f"{r['url']}")
+    print(f"\nScore {r['score']}/100 ({r['confidence']} confidence, {r['engine']} engine)\n{r['reason']}\n")
+    skills = json.loads(r["skills_json"])["skills"]
+    labels = {"have": "You have", "partial": "You partly have", "missing": "MISSING"}
+    for status in ("have", "partial", "missing"):
+        group = [s for s in skills if s["status"] == status]
+        if not group:
+            continue
+        print(f"{labels[status]}:")
+        for s in sorted(group, key=lambda s: ["required", "preferred", "mentioned"].index(s["importance"])):
+            line = f"  - {s['name']} [{s['importance']}]"
+            if s["evidence"]:
+                line += f"  <- {s['evidence'][:110]}"
+            print(line)
+        print()
+    return 0
+
+
+def cmd_gaps(args) -> int:
+    from jobpilot.matching.gaps import by_field, gap_report, to_csv, to_markdown
+    from jobpilot.matching.skills import load_taxonomy
+    from jobpilot.settings import load_settings
+
+    paths = get_paths(args.home)
+    settings = load_settings(paths.settings)
+    min_score = settings.matching.min_score if args.min_score is None else args.min_score
+    tax = load_taxonomy(paths.home / "skills.yaml")
+    with db.connect(paths.db) as conn:
+        rows, partial, total = gap_report(conn, tax, min_score, args.field)
+    if not total:
+        print("No matched jobs with descriptions yet. Run `jobpilot enrich` and `jobpilot match` (or lower --min-score).")
+        return 0
+    if args.export:
+        out = Path(args.export)
+        if out.suffix.lower() == ".csv":
+            to_csv(rows, partial, out)
+        else:
+            out.write_text(to_markdown(rows, partial, total, min_score, args.top), encoding="utf-8")
+        print(f"Wrote {out}")
+        return 0
+    print(f"Skill Gap Report: {total} matched jobs with descriptions (score {min_score}+)"
+          + (f", field '{args.field}'" if args.field else ""))
+    print(f"\nMissing:\n{'#':>3}  {'Skill':<28} {'Asked for in':>12} {'Required in':>12}")
+    for i, g in enumerate(rows[: args.top], 1):
+        print(f"{i:>3}  {g.name[:28]:<28} {g.jobs:>12} {g.required_in:>12}")
+    if partial:
+        print("\nYou partly have (worth strengthening): "
+              + ", ".join(f"{g.name} ({g.jobs})" for g in partial[:8]))
+    print("\nHow to learn the top 5:")
+    for g in rows[:5]:
+        print(f"  {g.name}: {g.learn}")
+    if not args.field:
+        print("\nBy field (top missing):")
+        for tag, gs in by_field(rows).items():
+            print(f"  {tag:<9} " + ", ".join(f"{g.name} ({g.by_field[tag]})" for g in gs[:6]))
+    print("\nExport with --export gaps.md or --export gaps.csv")
+    return 0
+
+
+def cmd_runs(args) -> int:
+    paths = get_paths(args.home)
+    with db.connect(paths.db) as conn:
+        rows = conn.execute("SELECT * FROM match_runs ORDER BY id DESC LIMIT ?", (args.limit,)).fetchall()
+        total = conn.execute("SELECT COALESCE(SUM(cost_usd), 0) FROM match_runs").fetchone()[0]
+    print(f"{'started':<26} {'engine':<26} {'jobs':>6} {'tokens in':>10} {'out':>8} {'cost':>9}")
+    for r in rows:
+        print(f"{r['started_at']:<26} {r['engine']:<26} {r['jobs_scored']:>6} {r['input_tokens']:>10,} "
+              f"{r['output_tokens']:>8,} ${r['cost_usd']:>8.4f}" + (f"  ! {r['error'][:60]}" if r["error"] else ""))
+    print(f"\nTotal spent on Claude scoring: ${total:.4f}")
+    return 0
+
+
 def cmd_sample(args) -> int:
     from jobpilot.samples import write_sample_docx, write_sample_pdf
 
@@ -321,6 +512,42 @@ def build_parser() -> argparse.ArgumentParser:
     jsh = js.add_parser("show")
     jsh.add_argument("id", type=int)
     j.set_defaults(func=cmd_jobs)
+
+    e = sub.add_parser("enrich", help="fetch missing job descriptions (Greenhouse/Lever/Ashby only)")
+    e.add_argument("--limit", type=int)
+    e.add_argument("--retry-failed", action="store_true")
+    e.set_defaults(func=cmd_enrich)
+
+    m = sub.add_parser("match", help="score jobs against your profile, or `match show ID`")
+    m.add_argument("show", nargs="?", choices=["show"], help=argparse.SUPPRESS)
+    m.add_argument("id", nargs="?", type=int, help=argparse.SUPPRESS)
+    m.add_argument("--engine", choices=["local", "claude"], help="override settings.matching.engine")
+    m.add_argument("--rescore", action="store_true", help="rescore everything, not just new/changed jobs")
+    m.add_argument("--limit", type=int)
+    m.set_defaults(func=lambda a: cmd_match_show(a) if a.show else cmd_match(a))
+
+    ms = sub.add_parser("matches", help="list scored jobs with filters")
+    ms.add_argument("--min-score", type=int)
+    ms.add_argument("--type", help="internship | co-op | part-time | full-time")
+    ms.add_argument("--location", help="text in location, or 'remote'")
+    ms.add_argument("--field", help="software | data | product | hardware | quant | security | design")
+    ms.add_argument("--since", help="posted on/after YYYY-MM-DD")
+    ms.add_argument("--search", help="text in title or company")
+    ms.add_argument("--with-description", action="store_true", help="only jobs with a full description")
+    ms.add_argument("--reasons", action="store_true", help="show the reason under each job")
+    ms.add_argument("--limit", type=int, default=25)
+    ms.set_defaults(func=cmd_matches)
+
+    g = sub.add_parser("gaps", help="Skill Gap Report across matched jobs")
+    g.add_argument("--min-score", type=int)
+    g.add_argument("--field")
+    g.add_argument("--top", type=int, default=20)
+    g.add_argument("--export", help="write to .md or .csv")
+    g.set_defaults(func=cmd_gaps)
+
+    ru = sub.add_parser("runs", help="scoring run log with token costs")
+    ru.add_argument("--limit", type=int, default=15)
+    ru.set_defaults(func=cmd_runs)
 
     s = sub.add_parser("sample-resume", help="write a made-up resume to try JobPilot with")
     s.add_argument("--out", default="samples")
