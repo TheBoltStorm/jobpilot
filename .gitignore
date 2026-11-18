@@ -1,5 +1,5 @@
 # --- Personal data: never commit ---
-data/
+/data/
 profile*.yaml
 !tests/fixtures/*.yaml
 *.db

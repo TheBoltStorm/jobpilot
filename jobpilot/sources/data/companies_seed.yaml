@@ -1,0 +1,74 @@
+# Starter list of companies with public job boards. Every token was checked against the live
+# API on 2026-11-17 and had open postings. Boards change, so `jobpilot discover` reports any
+# that start failing. Field tags: software, data, product, hardware, quant, security, design.
+#
+# `jobpilot companies init` copies the ones matching your target fields into data/companies.yaml,
+# which is the file you edit.
+
+greenhouse:
+  - {name: Airbnb, token: airbnb, fields: [software, data, product, design]}
+  - {name: Stripe, token: stripe, fields: [software, data, product]}
+  - {name: Databricks, token: databricks, fields: [software, data]}
+  - {name: Robinhood, token: robinhood, fields: [software, data, product, quant]}
+  - {name: Discord, token: discord, fields: [software, product, design]}
+  - {name: Figma, token: figma, fields: [software, product, design]}
+  - {name: Cloudflare, token: cloudflare, fields: [software, security]}
+  - {name: Coinbase, token: coinbase, fields: [software, data, security, product]}
+  - {name: Datadog, token: datadog, fields: [software, data, security]}
+  - {name: Duolingo, token: duolingo, fields: [software, data, product, design]}
+  - {name: Reddit, token: reddit, fields: [software, data, product]}
+  - {name: Pinterest, token: pinterest, fields: [software, data, product, design]}
+  - {name: Lyft, token: lyft, fields: [software, data, product]}
+  - {name: Dropbox, token: dropbox, fields: [software, product, design]}
+  - {name: Roblox, token: roblox, fields: [software, data, product, design]}
+  - {name: Asana, token: asana, fields: [software, product, design]}
+  - {name: Instacart, token: instacart, fields: [software, data, product]}
+  - {name: GitLab, token: gitlab, fields: [software, security]}
+  - {name: MongoDB, token: mongodb, fields: [software, data]}
+  - {name: Elastic, token: elastic, fields: [software, data, security]}
+  - {name: Samsara, token: samsara, fields: [software, hardware, data]}
+  - {name: Airtable, token: airtable, fields: [software, product]}
+  - {name: Scale AI, token: scaleai, fields: [software, data]}
+  - {name: Anthropic, token: anthropic, fields: [software, data, security]}
+  - {name: Twilio, token: twilio, fields: [software]}
+  - {name: Okta, token: okta, fields: [software, security]}
+  - {name: Affirm, token: affirm, fields: [software, data, quant]}
+  - {name: Chime, token: chime, fields: [software, data, product]}
+  - {name: Brex, token: brex, fields: [software, product]}
+  - {name: Nuro, token: nuro, fields: [software, hardware, data]}
+  - {name: Waymo, token: waymo, fields: [software, hardware, data]}
+  - {name: SpaceX, token: spacex, fields: [software, hardware]}
+  - {name: Relativity Space, token: relativity, fields: [hardware, software]}
+  - {name: DRW, token: drweng, fields: [quant, software]}
+  - {name: Jane Street, token: janestreet, fields: [quant, software]}
+  - {name: Point72, token: point72, fields: [quant, data]}
+  - {name: IMC Trading, token: imc, fields: [quant, software]}
+  - {name: Sigma Computing, token: sigmacomputing, fields: [software, data]}
+  - {name: Toast, token: toast, fields: [software, product]}
+  - {name: Flexport, token: flexport, fields: [software, data]}
+  - {name: Gusto, token: gusto, fields: [software, product]}
+  - {name: Squarespace, token: squarespace, fields: [software, design, product]}
+  - {name: Twitch, token: twitch, fields: [software, data, product]}
+  - {name: Block, token: block, fields: [software, data, security]}
+  - {name: Zscaler, token: zscaler, fields: [software, security]}
+  - {name: Verkada, token: verkada, fields: [software, hardware, security]}
+
+lever:
+  - {name: Palantir, token: palantir, fields: [software, data]}
+  - {name: Spotify, token: spotify, fields: [software, data, product, design]}
+  - {name: Zoox, token: zoox, fields: [software, hardware]}
+  - {name: Wealthfront, token: wealthfront, fields: [software, quant]}
+
+ashby:
+  - {name: Ramp, token: ramp, fields: [software, product, data]}
+  - {name: Notion, token: notion, fields: [software, product, design]}
+  - {name: OpenAI, token: openai, fields: [software, data, security]}
+  - {name: Linear, token: linear, fields: [software, product, design]}
+  - {name: Supabase, token: supabase, fields: [software]}
+  - {name: Replit, token: replit, fields: [software]}
+  - {name: PostHog, token: posthog, fields: [software, product]}
+  - {name: Cursor, token: cursor, fields: [software, data]}
+  - {name: Perplexity, token: perplexity, fields: [software, data]}
+  - {name: Modal, token: modal, fields: [software, data]}
+  - {name: Benchling, token: benchling, fields: [software, data]}
+  - {name: Sierra, token: sierra, fields: [software, data]}
