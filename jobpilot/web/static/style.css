@@ -183,3 +183,7 @@ ul.steps li { padding: 3px 0; border-bottom: 1px solid var(--line); }
 ul.steps .a-would_fill b, ul.steps .a-filled b { color: var(--ok); }
 ul.steps .a-left_for_you b { color: var(--warn); }
 ul.steps .a-failed b, ul.steps .a-not_found b { color: var(--err); }
+ul.moves { list-style: none; padding: 0; margin: 0 0 8px; max-height: 360px; overflow: auto; }
+ul.moves li { padding: 4px 0; border-bottom: 1px solid var(--line); }
+ul.moves b.up { color: var(--ok); white-space: nowrap; }
+ul.moves b.down { color: var(--muted); white-space: nowrap; }

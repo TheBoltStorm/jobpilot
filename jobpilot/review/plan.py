@@ -145,7 +145,7 @@ def merge_human(fresh: list[PlanField], saved: list[dict], keep_extra: bool = Tr
             human.pop(h["key"], None)
         if h is not None:
             value = h["value"]
-            if f.options and f.kind in ("select", "multi_select"):
+            if f.options and f.kind in ("select", "multi_select", "radio"):
                 parts = [fit_option(v, f.options) for v in value.split("; ")] if value else []
                 value = "; ".join(p for p in parts if p) if parts and all(parts) else ""
             if value or not h["value"]:
@@ -280,9 +280,9 @@ def save_answers(conn: sqlite3.Connection, job_id: int, profile: Profile, values
         new = values[f.key].strip()
         if new == f.value:
             continue
-        if new and f.options and f.kind in ("select", "multi_select"):
+        if new and f.options and f.kind in ("select", "multi_select", "radio"):
             bad = [v for v in new.split("; ") if v not in f.options]
-            if bad or (f.kind == "select" and "; " in new):
+            if bad or (f.kind != "multi_select" and "; " in new):
                 raise GateError(f"'{f.label}': pick from the form's options")
         if new:
             f.value, f.state, f.source = new, HUMAN, f"you, on the review page ({now_iso()[:10]})"

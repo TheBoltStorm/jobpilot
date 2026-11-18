@@ -426,3 +426,131 @@ def test_phase4_answers_without_maps_to_carry_over():
     saved = [{"key": "protected:work_authorization", "label": "x", "value": "Yes", "source": "you", "state": "human"}]
     out = merge_human(fresh, saved, keep_extra=False)
     assert out[0].value == "Yes" and out[0].state == "human"
+
+
+# ---------------------------------------------------------------- Lever
+
+LEVER_FIXTURE = Path(__file__).parent / "fixtures" / "lever_form.html"
+LEVER_URL = "https://jobs.lever.co/acmerobotics/11111111-2222-3333-4444-555555555555"
+
+
+def lever_questions():
+    from jobpilot.forms.lever import parse_apply_page
+
+    return parse_apply_page(LEVER_FIXTURE.read_text(encoding="utf-8"))
+
+
+def test_lever_form_url():
+    from jobpilot.forms.lever import form_url
+
+    assert form_url(LEVER_URL) == LEVER_URL + "/apply"
+    assert form_url(LEVER_URL + "/apply?lever-source=x") == LEVER_URL + "/apply"
+    with pytest.raises(ValueError):
+        form_url("https://example.test/jobs/1")
+
+
+def test_lever_parse_apply_page():
+    qs = {q.field_id: q for q in lever_questions()}
+    assert qs["name"].kind == "text" and qs["name"].required
+    assert qs["resume"].kind == "file" and qs["location"].kind == "location"
+    hear = qs["cards[c1][field0]"]
+    assert hear.kind == "radio" and hear.required and hear.options == ["University career fair", "Friend"]
+    assert qs["cards[c1][field1]"].kind == "select"
+    assert qs["cards[c1][field4]"].kind == "textarea"
+    eeo = qs["eeo[gender]"]
+    assert eeo.section == "eeoc" and eeo.options == ["Male", "Female", "Decline to self-identify"]
+    assert all(q.selector for q in qs.values())
+    assert lever_questions.__module__  # parse is pure: no page JavaScript needed
+
+
+def test_lever_plan(profile):
+    fields = {f.field_id: f for f in plan_from_form(lever_questions(), profile, "general",
+                                                    {"title": "Data Intern", "company": "Acme"}, SKILLS)}
+    assert fields["name"].value == profile.full_name and fields["name"].maps_to == "full_name"
+    assert fields["email"].value == profile.contact.email
+    assert fields["cards[c1][field0]"].value == "University career fair"  # short answer fitted to the options
+    assert fields["cards[c1][field2]"].protected == "sponsorship" and not fields["cards[c1][field2]"].value
+    assert fields["cards[c1][field3]"].protected == "legal"  # acknowledgement, never ticked by JobPilot
+    assert fields["cards[c1][field4]"].state == "draft"
+    assert fields["eeo[gender]"].protected and not fields["eeo[gender]"].value
+
+
+def test_lever_radio_answer_must_be_one_option(conn, profile):
+    job = add_job(conn, ats="lever")
+    conn.execute("UPDATE jobs SET url = ? WHERE id = ?", (LEVER_URL, job))
+
+    class LeverHTTP:
+        def get(self, url, **kw):
+            assert url == LEVER_URL + "/apply"
+            return type("R", (), {"text": LEVER_FIXTURE.read_text(encoding="utf-8")})()
+
+        def close(self):
+            pass
+
+    plan.load_real_form(conn, job, profile, LeverHTTP(), {})
+    with pytest.raises(GateError):
+        plan.save_answers(conn, job, profile, {"lv:cards[c1][field2]": "Yes; No"})
+    plan.save_answers(conn, job, profile, {"lv:cards[c1][field2]": "No"})
+
+
+def test_lever_filler_source_never_submits():
+    src = (Path(__file__).parents[1] / "jobpilot" / "autofill" / "lever.py").read_text(encoding="utf-8")
+    assert "click(" not in src and "press(" not in src and "submit" not in src.lower().replace("never submits", "")
+
+
+@pytest.fixture
+def lever_page():
+    sync_api = pytest.importorskip("playwright.sync_api")
+    with sync_api.sync_playwright() as p:
+        browser = None
+        for channel in ("msedge", "chrome", None):
+            try:
+                browser = p.chromium.launch(channel=channel, headless=True) if channel else p.chromium.launch(headless=True)
+                break
+            except Exception:
+                continue
+        if browser is None:
+            pytest.skip("no Playwright-compatible browser installed")
+        ctx = browser.new_context()
+        posts = []
+
+        def handler(route, request):
+            if request.method == "POST":
+                posts.append(request.url)
+                return route.fulfill(status=200, body="ok")
+            return route.fulfill(status=200, content_type="text/html", body=LEVER_FIXTURE.read_text(encoding="utf-8"))
+
+        ctx.route("https://jobs.lever.co/**", handler)
+        page = ctx.new_page()
+        page.goto(LEVER_URL + "/apply")
+        yield page, posts
+        browser.close()
+
+
+def test_lever_fill_stops_before_submit(lever_page, profile, tmp_path):
+    from jobpilot.autofill.lever import LeverFiller
+
+    page, posts = lever_page
+    resume = tmp_path / "general.pdf"
+    resume.write_bytes(b"%PDF-1.4 fake")
+    fields = []
+    for f in plan_from_form(lever_questions(), profile, "general", {"title": "Data Intern", "company": "Acme"}, SKILLS):
+        d = dict(f.__dict__)
+        if f.field_id == "cards[c1][field2]":
+            d.update(value="No", state="human")
+        if f.field_id == "cards[c1][field1]":
+            d.update(value="Master's", state="human")
+        fields.append(d)
+    filler = LeverFiller(page, dry_run=False, timeout_ms=2000)
+    result = filler.run(fields, str(resume))
+    assert result.outcome == "stopped_before_submit", result.message
+    assert page.input_value('[name="name"]') == profile.full_name
+    assert page.is_checked('[name="cards[c1][field0]"][value="University career fair"]')
+    assert page.is_checked('[name="cards[c1][field2]"][value="No"]')
+    assert page.input_value('[name="cards[c1][field1]"]') == "Master's"
+    assert not page.is_checked('[name="cards[c1][field3]"]')
+    assert page.input_value('[name="eeo[gender]"]') == ""
+    assert "Northwind" in page.input_value('[name="cards[c1][field4]"]')
+    assert page.eval_on_selector('[name="resume"]', "e => e.files[0].name") == "general.pdf"
+    page.click("#btn-submit")
+    assert page.evaluate("window.__posted") == 0 and posts == []

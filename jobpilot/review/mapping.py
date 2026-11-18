@@ -23,6 +23,7 @@ from jobpilot.review.drafts import draft_answer, is_open_ended
 
 # The only keys a question can map to. Order matters for the label rules below.
 PROFILE_KEYS: dict[str, str] = {
+    "full_name": "contact.first_name + last_name", "current_company": "experience[0].company (if current)",
     "first_name": "contact.first_name", "last_name": "contact.last_name", "preferred_name": "contact.preferred_name",
     "email": "contact.email", "phone": "contact.phone", "location": "contact.city, contact.state",
     "country": "contact.country", "linkedin": "links.linkedin", "github": "links.github",
@@ -33,7 +34,10 @@ PROFILE_KEYS: dict[str, str] = {
 
 BY_FIELD_ID = {"first_name": "first_name", "last_name": "last_name", "preferred_name": "preferred_name",
                "email": "email", "phone": "phone", "resume": "resume", "candidate-location": "location",
-               "school--0": "school", "degree--0": "degree"}
+               "school--0": "school", "degree--0": "degree",
+               # Lever
+               "name": "full_name", "location": "location", "org": "current_company", "urls[LinkedIn]": "linkedin",
+               "urls[GitHub]": "github", "urls[Portfolio]": "portfolio"}
 
 LABEL_RULES: list[tuple[re.Pattern, str]] = [(re.compile(p, re.IGNORECASE), k) for p, k in [
     (r"linked\s*in", "linkedin"),
@@ -50,7 +54,8 @@ LABEL_RULES: list[tuple[re.Pattern, str]] = [(re.compile(p, re.IGNORECASE), k) f
     (r"\b(university|college|school)( name)?\b.*\b(attend|attending|name)\b|^(university|school|college)\b",
      "school"),
     (r"\b(major|field of study|discipline|area of study)\b", "field_of_study"),
-    (r"^(highest )?degree\b|\bdegree (are you pursuing|type|level)\b", "degree"),
+    (r"^(highest )?degree\b|\bdegree (are you pursuing|type|level)\b|\bdegree are you (currently )?(enrolled|pursuing)",
+     "degree"),
     (r"\b(earliest )?start date\b|\bavailable to start\b|\bwhen can you start\b", "earliest_start"),
     (r"\b(current|home) (city|location)\b|\bwhere (are you|do you) (located|live|based)\b", "location"),
     (r"^country\b|\bcountry of residence\b", "country"),
@@ -63,7 +68,11 @@ NEVER_AUTOFILL = ("legal", "background_check")
 def profile_value(key: str, profile: Profile, resume_label: str) -> str:
     c, ln = profile.contact, profile.links
     ed = profile.education[0] if profile.education else None
+    current = ""
+    if profile.experience and profile.experience[0].end.strip().lower() in ("present", "current", "now"):
+        current = profile.experience[0].company
     return {
+        "full_name": profile.full_name, "current_company": current,
         "first_name": c.first_name, "last_name": c.last_name, "preferred_name": c.preferred_name,
         "email": c.email, "phone": c.phone, "location": ", ".join(p for p in (c.city, c.state) if p),
         "country": c.country, "linkedin": ln.linkedin, "github": ln.github, "portfolio": ln.portfolio,
@@ -85,6 +94,9 @@ def map_label(q: FormQuestion) -> str | None:
 
 
 def protected_for(q: FormQuestion) -> str:
+    # An answer like "I have read and understand..." makes the whole question an acknowledgement.
+    if any(protected_category(o) == "legal" for o in q.options):
+        return "legal"
     cat = protected_category(q.label)
     if cat:
         return cat
@@ -138,6 +150,12 @@ def fit_option(value: str, options: list[str]) -> str | None:
         season = [o for o in options if o.lower() == f"{_SEASONS[m.group(1)]} {m.group(2)}"]
         if len(season) == 1:
             return season[0]
+    # "Bachelor of Science" -> "Bachelor's": same leading word, and only one option has it.
+    first = re.match(r"[a-z]+", v)
+    if first and len(first.group()) >= 4 and " " in v:
+        same = [o for o in options if (m2 := re.match(r"[a-z]+", o.lower())) and m2.group() == first.group()]
+        if len(same) == 1:
+            return same[0]
     return None
 
 
@@ -170,7 +188,7 @@ def plan_from_form(questions: list[FormQuestion], profile: Profile, resume_label
             value = profile_value(key, profile, resume_label)
             how = "matched by label" if map_label(q) else "matched by Claude (key only; value from your profile)"
             src = f"profile: {PROFILE_KEYS[key]}" if key != "resume" else "resume versions"
-            if value and q.kind in ("select", "multi_select"):
+            if value and q.kind in ("select", "multi_select", "radio"):
                 opt = fit_option(value, q.options)
                 if opt:
                     f.value, f.state, f.source = opt, FILLED, f"{src} ('{value}'), {how}"

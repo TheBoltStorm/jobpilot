@@ -29,7 +29,7 @@ PROTECTED_CATEGORIES: dict[str, list[str]] = {
     "background_check": [r"background\s+check", r"criminal", r"convict", r"felon", r"drug\s+(test|screen)"],
     "legal": [
         r"non[-\s]?compete", r"non[-\s]?disclosure", r"\bnda\b", r"agree(ment)?\s+to", r"i\s+(certify|attest|agree)",
-        r"signature", r"\bsign\b", r"terms\s+(and|&)\s+conditions", r"consent", r"acknowledg",
+        r"i\s+have\s+read", r"i\s+(understand|acknowledge|confirm)\b", r"signature", r"\bsign\b", r"terms\s+(and|&)\s+conditions", r"consent", r"acknowledg",
         r"social\s+security", r"\bssn\b",
     ],
 }

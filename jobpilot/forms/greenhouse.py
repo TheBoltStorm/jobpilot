@@ -34,6 +34,7 @@ class FormQuestion:
     section: str = "application"  # application | location | education | eeoc | demographic
     description: str = ""
     model_key: str = ""  # profile key suggested by the optional Claude mapper (a key, never a value)
+    selector: str = ""  # CSS selector when the field has no id (Lever uses names)
 
     def to_dict(self) -> dict:
         return asdict(self)

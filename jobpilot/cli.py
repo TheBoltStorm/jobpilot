@@ -501,7 +501,7 @@ def cmd_forms(args) -> int:
                 return 0
             statuses = ("ready_to_fill", "needs_human") if not args.all else (
                 "matched", "ready_to_fill", "needs_human", "found")
-            print(f"Loading real form questions for up to {args.limit} Greenhouse jobs (rate-limited)...")
+            print(f"Loading real form questions for up to {args.limit} Greenhouse/Lever jobs (rate-limited)...")
             ok, failed = fetch_forms(conn, http, _gh_tokens(companies), statuses, args.limit, llm_map=llm,
                                      profile=profile)
             ids = [r[0] for r in conn.execute("SELECT job_id FROM forms")]
@@ -558,6 +558,49 @@ def cmd_prepare(args) -> int:
         print(f"  {k:<14} {v}")
     print("Review them with `jobpilot dashboard`.")
     return 0
+
+
+def cmd_tailor(args) -> int:
+    from jobpilot.matching.skills import load_taxonomy
+    from jobpilot.review import tailor
+    from jobpilot.review.status import GateError
+
+    paths = get_paths(args.home)
+    profile = _profile_or_exit(paths)
+    with db.connect(paths.db) as conn:
+        try:
+            with conn:
+                if args.approve:
+                    label = tailor.approve(conn, args.id, profile, paths.ensure().resumes)
+                    print(f"Created resume version '{label}' and picked it for job {args.id}.")
+                    return 0
+                if args.discard:
+                    tailor.discard(conn, args.id)
+                    print("Discarded.")
+                    return 0
+                d = tailor.propose(conn, args.id, profile, load_taxonomy(paths.home / "skills.yaml"))
+        except GateError as exc:
+            print(exc, file=sys.stderr)
+            return 1
+    print(f"Suggested order for job {args.id} (same content, nothing added or removed):")
+    for m in d.moves:
+        where = m.section if m.group in ("project order", "skills list") else f"{m.section} / {m.group}"
+        print(f"  #{m.old} -> #{m.new}  {where}: {m.text[:80]}")
+    print(f"Approve on the job's page in the dashboard, or `jobpilot tailor {args.id} --approve`. No file is made until you do.")
+    return 0
+
+
+def cmd_run(args) -> int:
+    from jobpilot.pipeline import run_pipeline
+
+    return run_pipeline(args.home, skip_discover=args.skip_discover, enrich_limit=args.enrich_limit,
+                        forms_limit=args.forms_limit)
+
+
+def cmd_doctor(args) -> int:
+    from jobpilot.pipeline import doctor
+
+    return doctor(get_paths(args.home), check_browser=not args.no_browser)
 
 
 def cmd_export(args) -> int:
@@ -679,7 +722,7 @@ def build_parser() -> argparse.ArgumentParser:
     ru.add_argument("--limit", type=int, default=15)
     ru.set_defaults(func=cmd_runs)
 
-    fo = sub.add_parser("forms", help="load real application questions (Greenhouse) for review")
+    fo = sub.add_parser("forms", help="load real application questions (Greenhouse, Lever) for review")
     fos = fo.add_subparsers(dest="action", required=True)
     ff = fos.add_parser("fetch", help="fetch one job's form, or forms for prepared jobs")
     ff.add_argument("id", type=int, nargs="?")
@@ -704,6 +747,23 @@ def build_parser() -> argparse.ArgumentParser:
     db_.add_argument("--port", type=int, default=8765)
     db_.add_argument("--no-browser", action="store_true", help="don't open a browser tab")
     db_.set_defaults(func=cmd_dashboard)
+
+    rn = sub.add_parser("run", help="discover, enrich, match, prepare and load forms in one go (fills nothing)")
+    rn.add_argument("--skip-discover", action="store_true", help="work on jobs you already have")
+    rn.add_argument("--enrich-limit", type=int, default=50)
+    rn.add_argument("--forms-limit", type=int, default=25)
+    rn.set_defaults(func=cmd_run)
+
+    dr = sub.add_parser("doctor", help="check your setup: profile, resume, privacy, settings, browser")
+    dr.add_argument("--no-browser", action="store_true", help="skip starting the autofill browser")
+    dr.set_defaults(func=cmd_doctor)
+
+    tl = sub.add_parser("tailor", help="suggest a resume version reordered for one job (you approve the diff)")
+    tl.add_argument("id", type=int)
+    g = tl.add_mutually_exclusive_group()
+    g.add_argument("--approve", action="store_true", help="create the suggested version as a DOCX")
+    g.add_argument("--discard", action="store_true")
+    tl.set_defaults(func=cmd_tailor)
 
     ex = sub.add_parser("export", help="export the applications log (.csv or .xlsx)")
     ex.add_argument("path", help="e.g. applications.xlsx")

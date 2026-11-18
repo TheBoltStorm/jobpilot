@@ -11,7 +11,9 @@ from jobpilot.core.http import PoliteClient
 from jobpilot.enrich import target_for
 from jobpilot.forms.greenhouse import FormQuestion, form_url_from_api, parse_questions
 
-FORM_ATS = ("greenhouse",)  # Lever and Ashby forms come later; their jobs show standard fields for now
+# Ashby isn't here on purpose: its application forms are only served from /api/, which
+# jobs.ashbyhq.com's robots.txt disallows. Ashby jobs show the standard fields; you apply on the site.
+FORM_ATS = ("greenhouse", "lever")
 
 
 def fetch_form(conn: sqlite3.Connection, http: PoliteClient, job: sqlite3.Row, gh_tokens: dict[str, str],
@@ -24,11 +26,17 @@ def fetch_form(conn: sqlite3.Connection, http: PoliteClient, job: sqlite3.Row, g
     """
     if job["ats"] not in FORM_ATS:
         raise ValueError(f"reading {job['ats'] or 'this site'}'s forms isn't supported yet")
-    target = target_for(job["ats"], job["url"], job["company"], gh_tokens)
-    if target is None:
-        raise ValueError("couldn't work out the Greenhouse board for this posting")
-    data = http.get_json(target.api_url + "?questions=true")
-    questions = parse_questions(data)
+    if job["ats"] == "lever":
+        from jobpilot.forms import lever
+
+        url = lever.form_url(job["url"])
+        questions = lever.parse_apply_page(http.get(url).text)
+    else:
+        target = target_for(job["ats"], job["url"], job["company"], gh_tokens)
+        if target is None:
+            raise ValueError("couldn't work out the Greenhouse board for this posting")
+        url = form_url_from_api(target.api_url)
+        questions = parse_questions(http.get_json(target.api_url + "?questions=true"))
     if not questions:
         raise ValueError("the posting has no application questions (it may be closed)")
     if llm_map and profile is not None:
@@ -46,7 +54,7 @@ def fetch_form(conn: sqlite3.Connection, http: PoliteClient, job: sqlite3.Row, g
         """INSERT INTO forms (job_id, ats, form_url, questions_json, fetched_at) VALUES (?, ?, ?, ?, ?)
            ON CONFLICT(job_id) DO UPDATE SET form_url=excluded.form_url, questions_json=excluded.questions_json,
              fetched_at=excluded.fetched_at""",
-        (job["id"], job["ats"], form_url_from_api(target.api_url),
+        (job["id"], job["ats"], url,
          json.dumps([q.to_dict() for q in questions]), now_iso()))
     return questions
 

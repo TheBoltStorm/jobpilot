@@ -11,9 +11,12 @@ from __future__ import annotations
 
 import re
 
+# Only "why this job / company" questions. Ones that need knowledge the profile doesn't have
+# ("tell us about one thing we're working on that excites you") are left for you.
 OPEN_ENDED = re.compile(
-    r"\b(why|interest(ed|s)?|excit\w*|motivat\w*|tell us (about|why)|what draws|cover letter|about yourself|"
-    r"what makes you|anything else)\b", re.IGNORECASE)
+    r"\bwhy (do|are|would) you\b|\bwhy (this|our|us)\b|\bwhat (draws|attracts|interests) you\b|"
+    r"\binterested in (this|the|our) (role|position|job|internship|team)\b|\bwhat motivates you to apply\b",
+    re.IGNORECASE)
 
 _EXP = re.compile(r"^(?P<title>.*?) @ (?P<org>.*?): (?P<text>.+)$")
 _PROJ = re.compile(r"^Project (?P<name>.*?): (?P<text>.+)$")

@@ -30,7 +30,7 @@
     {% set real_form = app.fields|selectattr('field_id')|list|length > 0 %}
     <div class="form-source {{ 'real' if real_form else '' }}">
       {% if real_form %}
-        <span><b>Real form:</b> this posting's own questions{% if form %}, loaded {{ form.fetched_at|day }} from Greenhouse{% endif %}.</span>
+        <span><b>Real form:</b> this posting's own questions{% if form %}, loaded {{ form.fetched_at|day }} from {{ job.ats|capitalize }}{% endif %}.</span>
         {% if can_load_form and editable %}<button class="btn small-btn" name="action" value="load_form">Reload</button>{% endif %}
       {% elif can_load_form %}
         <span>Showing the standard fields every application asks for.</span>
@@ -66,7 +66,7 @@
             {% if f.protected %}<div class="tag prot" title="Never filled from your profile">only you can answer</div>{% endif %}
             {% if f.optional %}<div class="muted small">optional</div>{% elif f.field_id %}<div class="muted small">required</div>{% endif %}</th>
           <td>
-            {% if f.kind == 'select' and f.options %}
+            {% if f.kind in ('select', 'radio') and f.options %}
               <select id="{{ fid }}" name="fv_{{ f.key }}" {{ dis }}>
                 <option value="">{{ '(optional: leave blank)' if f.optional else '(NEEDS_HUMAN: pick one)' }}</option>
                 {% for o in f.options %}<option {% if o == f.value %}selected{% endif %}>{{ o }}</option>{% endfor %}
@@ -144,7 +144,7 @@
           <button class="btn danger" name="action" value="reject">Reject</button></span>
       </div>
     {% elif st in ('approved', 'filled') %}
-      <p>{% if st == 'approved' %}Approved {{ app.approved_at|day }}. Autofill (Phase 5) fills the form from exactly
+      <p>{% if st == 'approved' %}Approved {{ app.approved_at|day }}. Autofill fills the form from exactly
         what you approved and stops before Submit. Changing anything above withdraws the approval.
         {% else %}The form was filled {{ app.filled_at|day }} and left open on the last page.{% endif %}</p>
       <label class="check confirm"><input type="checkbox" name="confirm_submitted" value="yes"> I clicked Submit on the site myself</label>
@@ -191,6 +191,41 @@
       <p class="muted">Not scored yet. Run <code>jobpilot match</code>.</p>
     {% endif %}
   </section>
+
+  {% if editable and match %}
+  <section class="card" id="tailor">
+    <h2>Tailored resume</h2>
+    {% if not tailored %}
+      <p class="muted small">Reorders your real bullets, projects and skills so the ones this posting asks for come first.
+        Nothing is added, removed or reworded. You see the changes before any file is made.</p>
+      <form method="post" action="/jobs/{{ job.id }}#tailor"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn" name="action" value="tailor">Suggest a tailored version</button></form>
+    {% else %}
+      {% if tailored.approved_at %}
+        <p>Created <b>{{ tailored.label }}</b> {{ tailored.approved_at|day }}{% if app and app.resume_label == tailored.label %}
+          and picked for this application{% endif %}.</p>
+        <p class="muted small">{{ tailored.path }}</p>
+      {% else %}
+        <p class="small">Suggested {{ tailored.created_at|day }}. Same content as your resume, in this order:</p>
+      {% endif %}
+      <ul class="moves small">
+        {% for m in tailor_moves if m.new < m.old %}<li><span class="muted">{{ m.section }}{% if m.group not in ('project order', 'skills list') %} · {{ m.group }}{% endif %}:</span>
+          {{ m.text[:90] }}{% if m.text|length > 90 %}…{% endif %}
+          <b class="up">#{{ m.old }} → #{{ m.new }}</b></li>{% endfor %}
+      </ul>
+      <p class="muted small">Moved up for this job. The other lines keep their order below them.</p>
+      {% if not tailored.approved_at %}
+      <form method="post" action="/jobs/{{ job.id }}#tailor"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="btns">
+          <button class="btn primary" name="action" value="tailor_approve">Approve and create DOCX</button>
+          <button class="btn" name="action" value="tailor_discard">Discard</button></div>
+        <p class="muted small">Approving makes a new resume version and picks it for this application
+          (which withdraws an approval of the answers, if there was one).</p>
+      </form>
+      {% endif %}
+    {% endif %}
+  </section>
+  {% endif %}
 
   {% if can_load_form %}
   <section class="card">

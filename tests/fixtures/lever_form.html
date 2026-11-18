@@ -1,0 +1,30 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Acme Robotics - Data Intern (fictional)</title></head>
+<body>
+<form id="application-form" method="POST" action="/acmerobotics/11111111-2222-3333-4444-555555555555/apply"
+      onsubmit="window.__posted++; return false;">
+  <input type="file" name="resume" id="resume-upload-input">
+  <input type="text" name="name" required>
+  <input type="email" name="email" required>
+  <input type="text" name="phone">
+  <input type="text" name="location" id="location-input">
+  <input type="text" name="org">
+  <input type="text" name="urls[LinkedIn]">
+  <input type="text" name="urls[GitHub]">
+  <input type="hidden" name="cards[c1][baseTemplate]" value="{&quot;text&quot;:&quot;Questions&quot;,&quot;fields&quot;:[{&quot;type&quot;:&quot;multiple-choice&quot;,&quot;text&quot;:&quot;How did you hear about this internship?&quot;,&quot;required&quot;:true,&quot;options&quot;:[{&quot;text&quot;:&quot;University career fair&quot;},{&quot;text&quot;:&quot;Friend&quot;}]},{&quot;type&quot;:&quot;dropdown&quot;,&quot;text&quot;:&quot;What degree are you currently pursuing?&quot;,&quot;required&quot;:true,&quot;options&quot;:[{&quot;text&quot;:&quot;Bachelor's&quot;},{&quot;text&quot;:&quot;Master's&quot;},{&quot;text&quot;:&quot;PhD&quot;}]},{&quot;type&quot;:&quot;multiple-choice&quot;,&quot;text&quot;:&quot;Will you now or in the future require visa sponsorship?&quot;,&quot;required&quot;:true,&quot;options&quot;:[{&quot;text&quot;:&quot;Yes&quot;},{&quot;text&quot;:&quot;No&quot;}]},{&quot;type&quot;:&quot;multiple-choice&quot;,&quot;text&quot;:&quot;Please confirm&quot;,&quot;required&quot;:true,&quot;options&quot;:[{&quot;text&quot;:&quot;I have read and understand the privacy notice&quot;}]},{&quot;type&quot;:&quot;textarea&quot;,&quot;text&quot;:&quot;Why are you interested in this role?&quot;,&quot;required&quot;:false}]}">
+  <ul>
+    <li><label><input type="radio" name="cards[c1][field0]" value="University career fair"><span>University career fair</span></label></li>
+    <li><label><input type="radio" name="cards[c1][field0]" value="Friend"><span>Friend</span></label></li>
+  </ul>
+  <select name="cards[c1][field1]"><option value="">Select ...</option><option value="Bachelor's">Bachelor's</option>
+    <option value="Master's">Master's</option><option value="PhD">PhD</option></select>
+  <label><input type="radio" name="cards[c1][field2]" value="Yes">Yes</label>
+  <label><input type="radio" name="cards[c1][field2]" value="No">No</label>
+  <label><input type="radio" name="cards[c1][field3]" value="I have read and understand the privacy notice">I have read</label>
+  <textarea name="cards[c1][field4]"></textarea>
+  <select name="eeo[gender]"><option value="">Select ...</option><option value="Male">Male</option>
+    <option value="Female">Female</option><option value="Decline to self-identify">Decline to self-identify</option></select>
+  <button type="submit" id="btn-submit">Submit application</button>
+</form>
+<script>window.__posted = 0;</script>
+</body></html>

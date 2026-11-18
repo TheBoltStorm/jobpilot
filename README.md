@@ -16,7 +16,7 @@ All personal data stays on your machine, in `data/` (gitignored).
 | 3 | Matching + skill-gap report | ✅ done (free local engine; Claude optional) |
 | 4 | Review dashboard | ✅ done |
 | 5 | Autofill (Greenhouse, dry run) | ✅ done (fill mode works; you always submit) |
-| 6 | Scaling + polish | next |
+| 6 | Lever forms, tailored resumes, one-command pipeline, setup check | ✅ done |
 
 ## Setup
 
@@ -47,6 +47,17 @@ No resume handy? Make a fictional one to try it out:
 jobpilot sample-resume            # writes samples/sample_resume.docx and .pdf
 jobpilot onboard --resume samples/sample_resume.pdf
 ```
+
+## Every day: one command
+
+```bash
+jobpilot doctor             # checks profile, resume, privacy (gitignore), settings and the autofill browser
+jobpilot run                # discover -> enrich -> match -> prepare -> load real forms
+jobpilot dashboard          # then review what's waiting
+```
+
+`jobpilot run` only collects and prepares. It never fills or submits anything. Use
+`--skip-discover` to work on jobs you already have, and `--enrich-limit` / `--forms-limit` to keep it short.
 
 ## Finding jobs
 
@@ -98,7 +109,8 @@ The dashboard has:
   - its description, match score and skill gaps;
   - every field autofill would type, next to where the value came from (your profile, your resume, or you);
   - DRAFT written answers and private notes;
-  - **Approve**, **Save edits**, **Skip** and **Reject** buttons.
+  - **Approve**, **Save edits**, **Skip** and **Reject** buttons;
+  - **Tailored resume**: a version of your resume reordered for this job (see below).
 - **Jobs.** Filter by status, field, type, score or search text.
 - **Skill gaps.** The gap report, exportable to Markdown or CSV.
 - **Run log.** Every discovery and scoring run, with Claude costs.
@@ -117,10 +129,20 @@ How the gate works:
 The dashboard only answers on 127.0.0.1. Every button needs a token that's created when it starts,
 and requests from other websites are refused, so a page you visit can't press Approve for you.
 
+## Tailored resumes
+
+On a job's page, **Suggest a tailored version** (or `jobpilot tailor 123`) reorders your real content
+so the parts this posting asks for come first: bullets within each job and project, the projects
+themselves, and your skills list. Jobs stay in date order. Nothing is added, removed or reworded.
+Before any file is written, the tailored version is checked line by line against the original, and
+the page shows you what moved. **Approve and create DOCX** (or `jobpilot tailor 123 --approve`) writes a
+plain DOCX built from your profile to `data/resumes/`, adds it as a resume version, and picks it for that
+application. Your other versions don't change.
+
 ## Autofill
 
 ```bash
-jobpilot forms fetch 123        # load the posting's real questions (Greenhouse public API)
+jobpilot forms fetch 123        # load the posting's real questions (Greenhouse API / Lever apply page)
 jobpilot autofill 123           # dry run: outlines what it would fill, types nothing
 jobpilot autofill 123 --fill    # approved jobs only: fills, then waits for you to click Submit
 ```
@@ -129,7 +151,9 @@ The review page shows each of the form's own questions and where its answer come
 profile, a DRAFT built from facts, your answer, or NEEDS_HUMAN. Autofill only uses what you approved.
 It never clicks Submit or presses Enter, and guards in the page and on the network block submission
 while it works. CAPTCHAs and sign-in pages stop it. It uses Microsoft Edge (or Chrome) already on
-your computer. Details: [docs/AUTOFILL.md](docs/AUTOFILL.md).
+your computer. Greenhouse and Lever forms are supported. Ashby forms aren't, because Ashby's robots.txt
+disallows the API its forms load from; you apply to those on the site yourself.
+Details: [docs/AUTOFILL.md](docs/AUTOFILL.md).
 
 ### Commands
 
@@ -155,6 +179,9 @@ your computer. Details: [docs/AUTOFILL.md](docs/AUTOFILL.md).
 | `jobpilot dashboard [--port 8765] [--no-browser]` | Open the local review dashboard. |
 | `jobpilot forms fetch [ID] [--limit N] [--all]` / `forms show ID` | Load (or show) a posting's real application questions. |
 | `jobpilot autofill ID [--fill] [--headless] [--browser msedge\|chrome]` | Dry run (default) or fill an approved application. Never submits. |
+| `jobpilot tailor ID [--approve\|--discard]` | Suggest a resume reordered for one job; approve to create the DOCX. |
+| `jobpilot run [--skip-discover] [--enrich-limit N] [--forms-limit N]` | The daily pipeline: discover, enrich, match, prepare, load forms. Fills nothing. |
+| `jobpilot doctor [--no-browser]` | Check your setup and say how to fix anything missing. |
 | `jobpilot export FILE.csv\|FILE.xlsx` | Export the applications log (no answers or personal details). |
 
 ## Rules JobPilot follows
@@ -195,9 +222,11 @@ jobpilot/
   enrich.py              fetch missing descriptions via public ATS APIs
   matching/              skills.yaml list, local scorer, optional Claude engine, gap report
   review/                statuses + the human gate, application plans, applications log export
-                         + field mapper (mapping.py) and fact-only drafts (drafts.py)
-  forms/                 real application questions from public ATS APIs (Greenhouse)
-  autofill/              Playwright filler: dry run / fill, submit guards, run log
+                         + field mapper (mapping.py), fact-only drafts (drafts.py),
+                         tailored resume versions (tailor.py)
+  pipeline.py            `jobpilot run` and `jobpilot doctor`
+  forms/                 real application questions (Greenhouse API, Lever apply page)
+  autofill/              Playwright fillers (Greenhouse, Lever): dry run / fill, submit guards, run log
   web/                   dashboard (FastAPI, templates, static)
   onboarding/
     resume_parser.py     PDF/DOCX -> text -> sections -> structured data (with source lines)

@@ -117,6 +117,27 @@ class GreenhouseFiller:
     def _by_id(self, field_id: str):
         return self.page.locator(f'[id="{field_id}"]')
 
+    def _locate(self, f: dict):
+        sel = f.get("selector")
+        if sel:
+            return self.page.locator(sel)
+        fid = f.get("field_id", "")
+        loc = self._by_id(fid)
+        # Lever fields have names, not ids.
+        return loc if loc.count() else self.page.locator(f'[name="{fid}"]')
+
+    def _group(self, kind: str, name: str):
+        """Radio buttons or checkboxes sharing one name."""
+        return self.page.locator(f'input[type={kind}][name="{name}"]')
+
+    def _choice_text(self, box) -> str:
+        bid = box.get_attribute("id") or ""
+        if bid:
+            lab = self.page.locator(f'label[for="{bid}"]')
+            if lab.count():
+                return lab.first.inner_text().strip()
+        return (box.get_attribute("value") or "").strip()
+
     def _mark(self, loc, color: str, tip: str) -> None:
         try:
             loc.first.evaluate("(el, a) => { el.style.outline = `3px solid ${a[0]}`; el.style.outlineOffset = '2px';"
@@ -156,10 +177,10 @@ class GreenhouseFiller:
         if not fid:
             step.note = "not a question on this form"
             return step
-        if kind == "multi_select" and self.page.locator(f'input[type=checkbox][name="{fid}"]').count():
-            loc = self.page.locator(f'input[type=checkbox][name="{fid}"]').first
+        if kind in ("multi_select", "radio") and self._group("checkbox" if kind == "multi_select" else "radio", fid).count():
+            loc = self._group("checkbox" if kind == "multi_select" else "radio", fid).first
         else:
-            loc = self._by_id(fid)
+            loc = self._locate(f)
         if what != "fill":  # left for you whether or not the field is showing yet
             step.note = val
             if loc.count():
@@ -188,26 +209,30 @@ class GreenhouseFiller:
 
     def _fill(self, loc, f: dict, kind: str, fid: str, val: str) -> bool:
         if kind == "file":
-            self.page.locator(f'input[type=file][id="{fid}"]').set_input_files(val)
+            loc.first.set_input_files(val)
             return True
         if kind in ("text", "textarea"):
-            loc.fill(val)
+            loc.first.fill(val)
             return True
         if kind == "select":
             return self._pick_option(loc, val, exact=True)
         if kind in ("location", "search_select"):
             return self._pick_option(loc, val, exact=False)
+        if kind == "radio":
+            radios = self._group("radio", fid)
+            for i in range(radios.count()):
+                if self._choice_text(radios.nth(i)).lower() == val.strip().lower():
+                    radios.nth(i).check()
+                    return True
+            return False
         if kind == "multi_select":
-            boxes = self.page.locator(f'input[type=checkbox][name="{fid}"]')
+            boxes = self._group("checkbox", fid)
             if boxes.count():
                 wanted = {v.strip().lower() for v in val.split("; ") if v.strip()}
                 hit = 0
                 for i in range(boxes.count()):
-                    box = boxes.nth(i)
-                    bid = box.get_attribute("id") or ""
-                    label = self.page.locator(f'label[for="{bid}"]').first.inner_text().strip().lower() if bid else ""
-                    if label in wanted:
-                        box.check()
+                    if self._choice_text(boxes.nth(i)).lower() in wanted:
+                        boxes.nth(i).check()
                         hit += 1
                 return hit == len(wanted)
             return all(self._pick_option(loc, v, exact=True) for v in val.split("; ") if v.strip())

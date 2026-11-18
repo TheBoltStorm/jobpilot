@@ -12,7 +12,10 @@ Submit yourself. It never submits. This page explains how it works and what it w
    jobpilot forms show 123
    ```
    For Greenhouse, this reads the public job-board API (`boards-api.greenhouse.io/...?...questions=true`).
-   The request is rate-limited and follows robots.txt, like discovery. You get every question, its
+   For Lever, it reads the posting's apply page (`jobs.lever.co/{company}/{id}/apply`): the questions
+   are in the page's HTML, so no JavaScript runs. Lever's robots.txt allows this and asks for a
+   1-second crawl delay, which JobPilot honors.
+   Both requests are rate-limited and follow robots.txt, like discovery. You get every question, its
    options, and the voluntary EEO and demographic sections, without opening a browser.
 2. **Review.** The review page lists each question next to its planned answer and where that answer came from:
    - **Profile:** matched to a known profile key (first name, email, LinkedIn, graduation date...).
@@ -60,7 +63,18 @@ Submit yourself. It never submits. This page explains how it works and what it w
   The browser uses its own profile, kept in your data folder (`browser_profile/`, gitignored). If a
   site needs you signed in, sign in there yourself.
 - **Custom career sites** (Workday, iCIMS...) stay in *Custom site*: apply on the site yourself.
-  Lever and Ashby forms are planned next.
+- **Ashby forms:** Ashby serves its application forms only through `/api/`, which `jobs.ashbyhq.com`'s
+  robots.txt disallows. So JobPilot doesn't read them, and Ashby jobs show only the standard fields.
+  Apply on the site yourself.
+
+## Lever specifics
+
+- Custom questions are radio buttons, checkboxes or dropdowns. An answer has to be exactly one
+  of the options, or it's left for you.
+- A question whose only option is an acknowledgement ("I have read and understand...") counts as
+  legally binding: JobPilot never ticks it.
+- *Current location* is typed, but Lever suggests places as you type, and you pick the suggestion yourself.
+- Voluntary surveys and EEO dropdowns are always yours to answer.
 
 ## Browser
 

@@ -158,6 +158,20 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX autofill_runs_job ON autofill_runs(job_id);
     """,
+    # v6: tailored resume versions (same content, reordered), proposed then approved by you
+    """
+    CREATE TABLE tailored_resumes (
+        job_id        INTEGER PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
+        base_label    TEXT NOT NULL,
+        label         TEXT NOT NULL,
+        profile_hash  TEXT NOT NULL,          -- the profile it was built from; a change means suggest again
+        tailored_json TEXT NOT NULL,
+        diff_json     TEXT NOT NULL,
+        created_at    TEXT NOT NULL,
+        approved_at   TEXT,
+        path          TEXT
+    );
+    """,
 ]
 
 

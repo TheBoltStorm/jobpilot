@@ -25,7 +25,9 @@ from jobpilot.review.plan import load_application, save_application
 from jobpilot.review.status import PRE_APPROVAL, GateError, log_event, transition
 
 MODES = ("dry_run", "fill")
-FILLERS = {"greenhouse": GreenhouseFiller}
+from jobpilot.autofill.lever import LeverFiller  # noqa: E402
+
+FILLERS = {"greenhouse": GreenhouseFiller, "lever": LeverFiller}
 
 
 def default_channel() -> str:

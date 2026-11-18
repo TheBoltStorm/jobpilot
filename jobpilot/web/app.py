@@ -26,7 +26,8 @@ from jobpilot.config import Paths
 from jobpilot.forms import FORM_ATS
 from jobpilot.core import db
 from jobpilot.onboarding.profile import load_profile
-from jobpilot.review import export, plan
+from jobpilot.matching.skills import load_taxonomy
+from jobpilot.review import export, plan, tailor
 from jobpilot.review.status import LABELS, PRE_APPROVAL, STATUSES, GateError
 from jobpilot.settings import Settings, load_settings, save_settings
 
@@ -36,7 +37,7 @@ PAGE_SIZE = 50
 
 MESSAGES = {
     "saved": "Saved.",
-    "approved": "Approved. Autofill (Phase 5) will fill this form and stop before Submit. You submit it yourself.",
+    "approved": "Approved. Autofill will fill this form and stop before Submit. You submit it yourself.",
     "rejected": "Rejected. You can reopen it from its page.",
     "skipped": "Skipped. It's at the end of your queue now.",
     "submitted": "Marked as submitted. Good luck!",
@@ -45,6 +46,9 @@ MESSAGES = {
     "settings": "Settings saved. They apply to the next discover / match run.",
     "queue_empty": "Nothing left to review. Run discover and match for more.",
     "form_loaded": "Loaded the real form's questions. Check the answers below.",
+    "tailored": "Suggested a tailored order. Check the changes under Tailored resume.",
+    "tailor_approved": "Created the tailored resume and picked it for this application.",
+    "tailor_discarded": "Discarded the tailored version.",
 }
 
 
@@ -185,7 +189,8 @@ def create_app(paths: Paths) -> FastAPI:
         form_row = conn.execute("SELECT form_url, fetched_at FROM forms WHERE job_id = ?", (job_id,)).fetchone()
         run = conn.execute("SELECT * FROM autofill_runs WHERE job_id = ? ORDER BY id DESC LIMIT 1", (job_id,)).fetchone()
         run_steps = json.loads(run["report_json"]) if run else []
-        return dict(job=job, match=match, skills=grouped, app=app_, events=events, sources=sources,
+        tailored = tailor.load(conn, job_id)
+        return dict(tailored=tailored, tailor_moves=tailor.moves(tailored), job=job, match=match, skills=grouped, app=app_, events=events, sources=sources,
                     resumes=resumes, next_id=nxt, editable=job["status"] in (*PRE_APPROVAL, "approved", "filled"),
                     form=form_row, can_load_form=job["ats"] in FORM_ATS, run=run, run_steps=run_steps)
 
@@ -261,6 +266,15 @@ def create_app(paths: Paths) -> FastAPI:
                     if action == "load_form":
                         load_form_for(conn, job_id, profile)
                         return go(f"/jobs/{job_id}", "form_loaded")
+                    if action == "tailor":
+                        tailor.propose(conn, job_id, profile, load_taxonomy(paths.home / "skills.yaml"))
+                        return go(f"/jobs/{job_id}", "tailored")
+                    if action == "tailor_approve":
+                        tailor.approve(conn, job_id, profile, paths.resumes)
+                        return go(f"/jobs/{job_id}", "tailor_approved")
+                    if action == "tailor_discard":
+                        tailor.discard(conn, job_id)
+                        return go(f"/jobs/{job_id}", "tailor_discarded")
                     if action == "approve":
                         if form.get("confirm") != "yes":
                             raise GateError("Tick the box to confirm you've checked every field and draft first.")
