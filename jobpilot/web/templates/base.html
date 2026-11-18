@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}JobPilot{% endblock %} · JobPilot</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/">JobPilot</a>
+  <nav>
+    {% set here = request.url.path %}
+    <a href="/" {% if here == '/' %}aria-current="page"{% endif %}>Board</a>
+    <a href="/review" {% if here.startswith('/jobs/') %}aria-current="page"{% endif %}>Review queue</a>
+    <a href="/jobs" {% if here == '/jobs' %}aria-current="page"{% endif %}>Jobs</a>
+    <a href="/gaps" {% if here == '/gaps' %}aria-current="page"{% endif %}>Skill gaps</a>
+    <a href="/runs" {% if here == '/runs' %}aria-current="page"{% endif %}>Run log</a>
+    <a href="/settings" {% if here == '/settings' %}aria-current="page"{% endif %}>Settings</a>
+  </nav>
+</header>
+<main>
+  {% if profile_missing %}<div class="banner warn">No profile yet. Run <code>jobpilot onboard</code> in a terminal, then reload.</div>{% endif %}
+  {% if msg %}<div class="banner ok" role="status">{{ msg }}</div>{% endif %}
+  {% if error %}<div class="banner err" role="alert">{{ error }}</div>{% endif %}
+  {% block content %}{% endblock %}
+</main>
+<footer class="gate">JobPilot never submits an application. It fills forms only after you approve, then stops so you click Submit yourself.</footer>
+</body>
+</html>

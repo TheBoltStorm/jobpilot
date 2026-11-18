@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% block title %}{{ job.title }}{% endblock %}
+{% block content %}
+{% set st = job.status %}
+<div class="job-head">
+  <div>
+    <h1>{{ job.title }}</h1>
+    <p class="meta">{{ job.company }} · {{ job.location or 'location unknown' }}{% if job.remote %} · {{ job.remote }}{% endif %}
+      {% if job.role_type %} · {{ job.role_type }}{% endif %}{% if job.date_posted %} · posted {{ job.date_posted }}{% endif %}</p>
+    <p class="meta"><a href="{{ job.url }}" target="_blank" rel="noopener noreferrer">Open posting ↗</a>
+      {% if job.apply_url and job.apply_url != job.url %} · <a href="{{ job.apply_url }}" target="_blank" rel="noopener noreferrer">Apply page ↗</a>{% endif %}
+      · {{ job.ats or 'unknown site' }} · job #{{ job.id }}</p>
+  </div>
+  <div class="head-right">
+    <span class="pill big s-{{ st }}">{{ st|label }}</span>
+    {% if next_id %}<a class="small" href="/jobs/{{ next_id }}">Next in queue →</a>{% endif %}
+  </div>
+</div>
+
+<div class="review">
+<form method="post" action="/jobs/{{ job.id }}" class="review-form" id="review">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+
+  <section class="card">
+    <div class="card-head"><h2>Application</h2>
+      {% if app %}<span class="muted small">{{ app.unanswered|length }} questions need you</span>{% endif %}</div>
+    {% if not app %}
+      <p class="muted">Create your profile (<code>jobpilot onboard</code>) to see what would be filled.</p>
+    {% else %}
+    <p class="muted small">This is everything autofill would type into the form. Values come only from your profile,
+      your resume versions, or what you type here. <b>Only you can answer</b> fields are never filled from your
+      profile; your answers to them stay on this one application. Phase 5 adds the real form's own questions.</p>
+    <label class="resume-pick">Resume version
+      <select name="resume" {% if not editable %}disabled{% endif %}>
+        {% for r in resumes %}<option value="{{ r.label }}" {% if r.label == app.resume_label %}selected{% endif %}>{{ r.label }}{% if r.is_default %} (default){% endif %}</option>{% endfor %}
+        {% if not resumes %}<option value="">No resumes added</option>{% endif %}
+      </select>
+      {% if not resumes %}<span class="warn-text small">Add one with <code>jobpilot resume add FILE</code></span>{% endif %}</label>
+    <table class="fields">
+      <thead><tr><th>Field</th><th>Value</th><th>Where it came from</th></tr></thead>
+      <tbody>
+      {% for f in app.fields if f.key != 'resume' %}
+        {% set blank_ok = f.state == 'needs_human' and f.optional %}
+        <tr class="f-{{ 'optional' if blank_ok else f.state }}{% if f.protected %} protected{% endif %}">
+          <th scope="row"><label for="fv_{{ loop.index }}">{{ f.label }}</label>
+            {% if f.protected %}<div class="tag prot" title="Never filled from your profile">only you can answer</div>{% endif %}
+            {% if f.optional %}<div class="muted small">optional</div>{% endif %}</th>
+          <td>
+            <input id="fv_{{ loop.index }}" name="fv_{{ f.key }}" value="{{ f.value }}" {% if not editable %}disabled{% endif %}
+                   placeholder="{{ ('Optional: leave blank or answer' if blank_ok else 'NEEDS_HUMAN: type your answer') if f.state == 'needs_human' else '' }}" autocomplete="off">
+          </td>
+          <td class="small">
+            {% if blank_ok and not f.protected %}<span class="state op">Optional</span>
+            {% elif f.state == 'needs_human' %}<span class="state nh">NEEDS_HUMAN</span>
+            {% elif f.state == 'human' %}<span class="state hu">You</span>
+            {% else %}<span class="state fi">Profile</span>{% endif %}
+            <span class="muted">{{ f.source }}</span></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+
+    <h3>Written answers <span class="tag draft">DRAFT</span></h3>
+    <p class="muted small">Answers to open questions ("Why this company?"). They stay DRAFT until you approve. Phase 5
+      drafts them from facts in your resume and the posting only. For now you can add and write your own.</p>
+    <input type="hidden" name="draft_count" value="{{ app.drafts|length }}">
+    {% for d in app.drafts %}
+      <div class="draft-box">
+        <input name="dq_{{ loop.index0 }}" value="{{ d.question }}" class="q" {% if not editable %}disabled{% endif %} aria-label="Question">
+        <textarea name="dt_{{ loop.index0 }}" rows="4" {% if not editable %}disabled{% endif %} aria-label="Answer">{{ d.text }}</textarea>
+        <input type="hidden" name="dn_{{ loop.index0 }}" value="{{ d.note }}">
+        <div class="small muted">{{ d.note }}{% if editable %} · <label><input type="checkbox" name="dd_{{ loop.index0 }}" value="1"> delete</label>{% endif %}</div>
+      </div>
+    {% endfor %}
+    {% if editable %}
+      <details class="draft-box new" {% if not app.drafts %}open{% endif %}>
+        <summary>Add a question</summary>
+        <input name="dq_new" placeholder="Question, e.g. Why do you want to work here?" class="q">
+        <textarea name="dt_new" rows="3" placeholder="Your answer"></textarea>
+      </details>
+    {% endif %}
+
+    <h3>Notes</h3>
+    <textarea name="notes" rows="2" placeholder="Private notes (referral, deadline, contacts...)" {% if not editable and st != 'submitted' %}disabled{% endif %}>{{ app.notes }}</textarea>
+    {% endif %}
+  </section>
+
+  {% if app %}
+  <section class="card actions" aria-label="Decision">
+    {% if st in ('found', 'matched', 'ready_to_fill', 'needs_human', 'account_wall', 'custom_site') %}
+      {% if app.unanswered %}
+        <p class="warn-text">{{ app.unanswered|length }} questions have no answer yet:
+        </p>
+        <ul class="warn-text small">{% for f in app.unanswered %}<li>{{ f.label }}</li>{% endfor %}</ul>
+        <p class="muted small">If you approve anyway, autofill leaves them blank for you to answer on the form.</p>
+      {% endif %}
+      {% if st == 'custom_site' %}<p class="muted small">This isn't a Greenhouse, Lever or Ashby form, so autofill won't
+        handle it. Approve to track it, then apply on the site yourself.</p>{% endif %}
+      <label class="check confirm"><input type="checkbox" name="confirm" value="yes"> I've checked every field and draft above</label>
+      <div class="btns">
+        <button class="btn primary" name="action" value="approve">Approve</button>
+        <button class="btn" name="action" value="save">Save edits</button>
+        <button class="btn" name="action" value="skip" title="Come back later">Skip</button>
+        <span class="reject"><input name="reason" placeholder="Reason (optional)" aria-label="Reject reason">
+          <button class="btn danger" name="action" value="reject">Reject</button></span>
+      </div>
+    {% elif st in ('approved', 'filled') %}
+      <p>{% if st == 'approved' %}Approved {{ app.approved_at|day }}. Autofill (Phase 5) fills the form from exactly
+        what you approved and stops before Submit. Changing anything above withdraws the approval.
+        {% else %}The form was filled {{ app.filled_at|day }} and left open on the last page.{% endif %}</p>
+      <label class="check confirm"><input type="checkbox" name="confirm_submitted" value="yes"> I clicked Submit on the site myself</label>
+      <div class="btns">
+        <button class="btn primary" name="action" value="submitted">Mark as submitted</button>
+        <button class="btn" name="action" value="save">Save edits (withdraws approval)</button>
+        <span class="reject"><input name="reason" placeholder="Reason (optional)" aria-label="Reject reason">
+          <button class="btn danger" name="action" value="reject">Reject</button></span>
+      </div>
+    {% elif st == 'submitted' %}
+      <p>You submitted this on {{ app.submitted_at|day }}.</p>
+      <div class="btns"><button class="btn" name="action" value="save">Save notes</button></div>
+    {% elif st == 'rejected' %}
+      <p>You rejected this{% if app.rejected_at %} on {{ app.rejected_at|day }}{% endif %}.</p>
+      <div class="btns"><button class="btn" name="action" value="reopen">Reopen</button></div>
+    {% elif st == 'posting_closed' %}
+      <p>The posting is no longer listed. If it comes back, discovery reopens it.</p>
+      <div class="btns"><button class="btn danger" name="action" value="reject">Reject</button></div>
+    {% endif %}
+  </section>
+  {% endif %}
+</form>
+
+<aside>
+  <section class="card">
+    <div class="card-head"><h2>Match</h2>
+      {% if match %}<span class="score big sc-{{ match.score // 25 }}">{{ match.score }}</span>{% endif %}</div>
+    {% if match %}
+      <p>{{ match.reason }}</p>
+      <p class="muted small">{{ match.confidence }} confidence · {{ match.engine }} engine · scored {{ match.scored_at|day }}</p>
+      {% for status, title in (('missing', 'Skill gaps'), ('partial', 'You partly have'), ('have', 'You have')) %}
+        {% if skills[status] %}
+        <h3>{{ title }}</h3>
+        <ul class="skills s-{{ status }}">
+          {% for s in skills[status] %}
+          <li><b>{{ s.name }}</b> <span class="tag imp-{{ s.importance }}">{{ s.importance }}</span>
+            {% if s.evidence %}<div class="ev small">↳ {{ s.evidence }}</div>{% endif %}
+            {% if s.job_snippet %}<div class="snip small muted">“{{ s.job_snippet }}”</div>{% endif %}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      {% endfor %}
+    {% else %}
+      <p class="muted">Not scored yet. Run <code>jobpilot match</code>.</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Description</h2>
+    {% if job.description %}
+      <div class="desc">{{ job.description }}</div>
+    {% else %}
+      <p class="muted">No description from this source yet. <code>jobpilot enrich</code> fetches it for Greenhouse,
+        Lever and Ashby postings; otherwise <a href="{{ job.url }}" target="_blank" rel="noopener noreferrer">read it on the site</a>.</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>History</h2>
+    <ul class="events">
+      {% for e in events %}
+        <li><span class="muted small">{{ e.at|day }}</span> <span class="who-{{ e.actor }}">{{ 'You' if e.actor == 'user' else 'JobPilot' }}</span>
+          {{ e.action }}{% if e.to_status and e.action != e.to_status %} → {{ e.to_status|label }}{% endif %}
+          {% if e.note %}<span class="muted">({{ e.note }})</span>{% endif %}</li>
+      {% else %}<li class="muted">Nothing yet.</li>{% endfor %}
+      <li><span class="muted small">{{ job.date_found|day }}</span> Found via
+        {% for s in sources %}{{ s.source }}{% if not s.active %} (gone){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</li>
+    </ul>
+  </section>
+</aside>
+</div>
+{% endblock %}

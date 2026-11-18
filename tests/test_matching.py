@@ -184,3 +184,14 @@ def test_gap_report(conn, profile, tmp_path):
     out = tmp_path / "gaps.csv"
     to_csv(rows, partial, out)
     assert out.read_text(encoding="utf-8").splitlines()[1].startswith("Go,missing,")
+
+
+def test_snippets_cut_at_word_boundaries():
+    text = "We are looking for someone with hands-on, production experience writing Python services at scale every day."
+    snip = TAX.find(text)["python"]
+    assert "Python" in snip
+    body = snip.strip("…")
+    assert text.find(body) != -1  # a real substring
+    assert text[text.find(body) - 1] in (" ", "") if text.find(body) > 0 else True
+    end = text.find(body) + len(body)
+    assert end == len(text) or text[end] == " "

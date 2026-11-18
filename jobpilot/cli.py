@@ -306,7 +306,8 @@ def cmd_match(args) -> int:
                                   WHERE j.description = '' AND j.status IN ('found', 'matched')""").fetchone()[0]
     cost = f", {s.input_tokens:,} in / {s.output_tokens:,} out tokens, about ${s.cost_usd:.4f}" if engine == "claude" else " (free)"
     print(f"Scored {s.scored} jobs with the {s.engine} engine{cost}. "
-          f"{s.matched} scored {settings.matching.min_score}+ and are now 'matched'.")
+          f"{s.matched} newly scored {settings.matching.min_score}+ and are now 'matched'. "
+          "Jobs you've prepared or decided on keep their status.")
     if no_desc:
         print(f"{no_desc} jobs have no description, so their scores are title-only estimates. "
               "`jobpilot enrich` fetches descriptions where it can.")
@@ -441,6 +442,41 @@ def cmd_runs(args) -> int:
     return 0
 
 
+def cmd_dashboard(args) -> int:
+    from jobpilot.web.app import run
+
+    run(get_paths(args.home), port=args.port, open_browser=not args.no_browser)
+    return 0
+
+
+def cmd_prepare(args) -> int:
+    from jobpilot.review.plan import prepare_matched
+
+    paths = get_paths(args.home)
+    profile = _profile_or_exit(paths)
+    with db.connect(paths.db) as conn:
+        n = prepare_matched(conn, profile)
+        counts = dict(conn.execute("""SELECT status, COUNT(*) FROM jobs
+                                      WHERE status IN ('ready_to_fill','needs_human','custom_site','account_wall')
+                                      GROUP BY status""").fetchall())
+    print(f"Prepared {n} matched jobs. Nothing was filled or sent.")
+    for k, v in counts.items():
+        print(f"  {k:<14} {v}")
+    print("Review them with `jobpilot dashboard`.")
+    return 0
+
+
+def cmd_export(args) -> int:
+    from jobpilot.review import export
+
+    paths = get_paths(args.home)
+    out = Path(args.path)
+    with db.connect(paths.db) as conn:
+        n = export.to_xlsx(conn, out) if out.suffix.lower() == ".xlsx" else export.to_csv(conn, out)
+    print(f"Wrote {n} applications to {out} (no answers or personal details included).")
+    return 0
+
+
 def cmd_sample(args) -> int:
     from jobpilot.samples import write_sample_docx, write_sample_pdf
 
@@ -548,6 +584,18 @@ def build_parser() -> argparse.ArgumentParser:
     ru = sub.add_parser("runs", help="scoring run log with token costs")
     ru.add_argument("--limit", type=int, default=15)
     ru.set_defaults(func=cmd_runs)
+
+    pp = sub.add_parser("prepare", help="sort matched jobs into Ready to fill / Needs human / Custom site")
+    pp.set_defaults(func=cmd_prepare)
+
+    db_ = sub.add_parser("dashboard", help="open the review dashboard in your browser (local only)")
+    db_.add_argument("--port", type=int, default=8765)
+    db_.add_argument("--no-browser", action="store_true", help="don't open a browser tab")
+    db_.set_defaults(func=cmd_dashboard)
+
+    ex = sub.add_parser("export", help="export the applications log (.csv or .xlsx)")
+    ex.add_argument("path", help="e.g. applications.xlsx")
+    ex.set_defaults(func=cmd_export)
 
     s = sub.add_parser("sample-resume", help="write a made-up resume to try JobPilot with")
     s.add_argument("--out", default="samples")

@@ -15,7 +15,7 @@ from jobpilot.onboarding.profile import Profile
 from jobpilot.sources.fields import job_tags, tags_for
 
 # Bump when scoring rules change so stored scores get redone.
-SCORER_VERSION = 4
+SCORER_VERSION = 5
 W_SKILLS, W_ROLE, W_LOCATION = 70, 15, 15
 GRAD_DEGREE_PENALTY = 25
 

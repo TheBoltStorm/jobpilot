@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+<p class="muted">Saved to <code>{{ path }}</code>. API keys never go here: put them in <code>.env</code>.
+  There's no setting for automatic submitting, and there never will be.</p>
+
+<form method="post" action="/settings" class="settings">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+
+  <section class="card">
+    <h2>Sources</h2>
+    {% set src = s.sources %}
+    <label class="check"><input type="checkbox" name="src_github_lists" {% if src.github_lists.enabled %}checked{% endif %}> GitHub internship / new-grad lists</label>
+    <label class="block">Lists, one per line: <code>owner/repo branch kind</code> (kind is internship or new_grad)
+      <textarea name="github_lists" rows="4">{% for l in src.github_lists.lists %}{{ l.repo }} {{ l.branch }} {{ l.kind }}
+{% endfor %}</textarea></label>
+    <label class="check"><input type="checkbox" name="src_greenhouse" {% if src.greenhouse.enabled %}checked{% endif %}> Greenhouse boards</label>
+    <label class="check"><input type="checkbox" name="src_lever" {% if src.lever.enabled %}checked{% endif %}> Lever boards</label>
+    <label class="check"><input type="checkbox" name="src_ashby" {% if src.ashby.enabled %}checked{% endif %}> Ashby boards</label>
+    <p class="muted small">Which companies' boards are checked lives in <code>companies.yaml</code> (<code>jobpilot companies list</code>).</p>
+    <label class="check"><input type="checkbox" name="src_usajobs" {% if src.usajobs.enabled %}checked{% endif %}> USAJOBS
+      <span class="muted small">{{ 'API key found in .env' if has_usajobs else 'needs USAJOBS_API_KEY and USAJOBS_EMAIL in .env' }}</span></label>
+    <label class="block">USAJOBS keywords, comma-separated (empty = use your target roles)
+      <input name="usajobs_keywords" value="{{ src.usajobs.keywords|join(', ') }}"></label>
+    <label class="check"><input type="checkbox" name="src_rss" {% if src.rss.enabled %}checked{% endif %}> RSS / Atom feeds</label>
+    <label class="block">Feeds, one per line: <code>https://url | Company name</code>
+      <textarea name="rss_feeds" rows="3">{% for f in src.rss.feeds %}{{ f.url }}{% if f.company %} | {{ f.company }}{% endif %}
+{% endfor %}</textarea></label>
+  </section>
+
+  <section class="card">
+    <h2>Filters</h2>
+    <label class="check"><input type="checkbox" name="filter_by_profile" {% if s.filter_by_profile %}checked{% endif %}> Only keep jobs that fit your target role types and fields</label>
+    <label class="row">Skip postings older than <input type="number" name="max_age_days" value="{{ s.max_age_days }}" min="1" class="w4"> days</label>
+    <label class="row">Minimum match score <input type="number" name="min_score" value="{{ s.matching.min_score }}" min="0" max="100" class="w4"></label>
+  </section>
+
+  <section class="card">
+    <h2>Matching model</h2>
+    <label class="row">Engine
+      <select name="engine">
+        <option value="local" {% if s.matching.engine == 'local' %}selected{% endif %}>Local (free, offline)</option>
+        <option value="claude" {% if s.matching.engine == 'claude' %}selected{% endif %}>Claude (paid, needs a key)</option>
+      </select>
+      <span class="muted small">{{ 'ANTHROPIC_API_KEY found in .env' if has_key else 'no ANTHROPIC_API_KEY in .env' }}</span></label>
+    <label class="row">Claude model <input name="claude_model" value="{{ s.matching.claude_model }}"></label>
+    <label class="row">Spend cap per run (USD) <input type="number" step="0.01" min="0" name="claude_spend_cap_usd" value="{{ s.matching.claude_spend_cap_usd }}" class="w6"></label>
+    <label class="row">Max jobs per Claude run <input type="number" min="1" name="claude_max_jobs_per_run" value="{{ s.matching.claude_max_jobs_per_run }}" class="w6"></label>
+    <label class="row">Parallel Claude requests <input type="number" min="1" max="16" name="claude_concurrency" value="{{ s.matching.claude_concurrency }}" class="w4"></label>
+    <label class="row">Descriptions to fetch per <code>enrich</code> <input type="number" min="0" name="enrich_per_run" value="{{ s.matching.enrich_per_run }}" class="w6"></label>
+  </section>
+
+  <section class="card">
+    <h2>Rate limits</h2>
+    <label class="row">Seconds between requests to the same site <input type="number" step="0.1" min="0.5" name="min_seconds_between_requests" value="{{ s.min_seconds_between_requests }}" class="w6">
+      <span class="muted small">at least 0.5; a site's robots.txt Crawl-delay wins if it's longer</span></label>
+    <label class="row">Request timeout (seconds) <input type="number" step="1" min="1" max="300" name="request_timeout_seconds" value="{{ s.request_timeout_seconds }}" class="w6"></label>
+    <label class="block">User agent <input name="user_agent" value="{{ s.user_agent }}"></label>
+  </section>
+
+  <div class="btns"><button class="btn primary">Save settings</button></div>
+</form>
+{% endblock %}

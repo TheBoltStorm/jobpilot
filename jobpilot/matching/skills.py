@@ -34,6 +34,19 @@ def _alias_regex(alias: str) -> re.Pattern:
     return re.compile(rf"(?<![\w+#]){re.escape(alias)}(?![\w+#]|\.\w)", re.IGNORECASE)
 
 
+def _snippet(text: str, start: int, end: int, pad: int = 60) -> str:
+    """The match plus about `pad` characters each side, cut at word boundaries."""
+    lo, hi = max(0, start - pad), min(len(text), end + pad)
+    if lo > 0:
+        sp = text.find(" ", lo, start)
+        lo = sp + 1 if sp != -1 else lo
+    if hi < len(text):
+        sp = text.rfind(" ", end, hi)
+        hi = sp if sp != -1 else hi
+    out = " ".join(text[lo:hi].split())
+    return ("…" if lo > 0 else "") + out + ("…" if hi < len(text) else "")
+
+
 class Taxonomy:
     def __init__(self, data: dict):
         self.skills: dict[str, Skill] = {}
@@ -55,8 +68,7 @@ class Taxonomy:
         for key, skill in self.skills.items():
             m = skill.found_in(text)
             if m:
-                start = max(0, m.start() - 60)
-                out[key] = text[start: m.end() + 60].replace("\n", " ").strip()
+                out[key] = _snippet(text, m.start(), m.end())
         return out
 
     def expand_implied(self, keys: set[str]) -> set[str]:

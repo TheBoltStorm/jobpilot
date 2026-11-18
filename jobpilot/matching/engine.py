@@ -13,8 +13,11 @@ from jobpilot.matching.local import SCORER_VERSION, MatchResult, profile_evidenc
 from jobpilot.matching.skills import Taxonomy
 from jobpilot.onboarding.profile import Profile
 
-# Jobs in these statuses get (re)scored. Anything the user has acted on keeps its status.
-SCORABLE = ("found", "matched")
+# Jobs in these statuses get (re)scored, so the review page always shows a current score.
+SCORABLE = ("found", "matched", "ready_to_fill", "needs_human", "account_wall", "custom_site")
+# Only these move between found and matched. Prepared jobs keep their bucket; anything you've
+# approved, submitted or rejected isn't touched at all.
+RECLASSIFY = ("found", "matched")
 
 
 def profile_hash(profile: Profile) -> str:
@@ -64,10 +67,10 @@ def save_match(conn: sqlite3.Connection, job: sqlite3.Row, result: MatchResult, 
     # Title-only estimates never count as a match: a job needs a description to be judged.
     new_status = "matched" if result.score >= min_score and job["description"] else "found"
     conn.execute(
-        f"UPDATE jobs SET status = ? WHERE id = ? AND status IN ({','.join('?' * len(SCORABLE))})",
-        (new_status, job["id"], *SCORABLE),
+        f"UPDATE jobs SET status = ? WHERE id = ? AND status IN ({','.join('?' * len(RECLASSIFY))})",
+        (new_status, job["id"], *RECLASSIFY),
     )
-    return new_status == "matched"
+    return new_status == "matched" and job["status"] in RECLASSIFY
 
 
 def run_local(conn: sqlite3.Connection, profile: Profile, tax: Taxonomy, min_score: int,

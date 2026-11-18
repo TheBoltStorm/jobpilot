@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Jobs{% endblock %}
+{% block content %}
+<h1>Jobs {% if filters.status %}<span class="muted">· {{ filters.status|label }}</span>{% endif %}</h1>
+
+<form class="filters" method="get" action="/jobs" data-autosubmit>
+  <label>Status
+    <select name="status">
+      <option value="">Open (not closed/rejected)</option>
+      {% for s in STATUSES %}<option value="{{ s.key }}" {% if filters.status == s.key %}selected{% endif %}>{{ s.label }}</option>{% endfor %}
+    </select></label>
+  <label>Search <input type="search" name="q" value="{{ filters.q }}" placeholder="title, company, city"></label>
+  <label>Field
+    <select name="field"><option value="">Any</option>
+      {% for f in fields %}<option {% if filters.field == f %}selected{% endif %}>{{ f }}</option>{% endfor %}
+    </select></label>
+  <label>Type
+    <select name="type"><option value="">Any</option>
+      {% for t in types %}<option {% if filters.type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+    </select></label>
+  <label>Min score <input type="number" name="min_score" min="0" max="100" value="{{ filters.min_score }}" class="w4"></label>
+  <label class="check"><input type="checkbox" name="described" value="1" {% if filters.described %}checked{% endif %}> Has description</label>
+  <label>Sort
+    <select name="sort">
+      <option value="score" {% if filters.sort == 'score' %}selected{% endif %}>Best match</option>
+      <option value="date" {% if filters.sort == 'date' %}selected{% endif %}>Newest</option>
+      <option value="company" {% if filters.sort == 'company' %}selected{% endif %}>Company</option>
+    </select></label>
+  <noscript><button class="btn">Filter</button></noscript>
+  <a href="/jobs" class="small">Clear</a>
+</form>
+
+<p class="muted">{{ total }} jobs{% if pages > 1 %}, page {{ page }} of {{ pages }}{% endif %}.</p>
+
+<table class="jobs">
+  <thead><tr><th class="num">Score</th><th>Job</th><th>Location</th><th>Posted</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr>
+    <td class="num">{% if r.score is not none %}<span class="score sc-{{ (r.score // 25) }}">{{ r.score }}</span>{% if r.confidence == 'low' %}<span class="muted" title="Low confidence: no description yet">?</span>{% endif %}{% else %}–{% endif %}</td>
+    <td><a href="/jobs/{{ r.id }}">{{ r.title }}</a><div class="muted small">{{ r.company }}{% if r.role_type %} · {{ r.role_type }}{% endif %}{% if r.ats %} · {{ r.ats }}{% endif %}</div>
+      {% if r.reason %}<div class="reason small">{{ r.reason }}</div>{% endif %}</td>
+    <td class="small">{{ r.location or ('Remote' if r.remote == 'remote' else '–') }}</td>
+    <td class="small nowrap">{{ r.date_posted or '–' }}</td>
+    <td><span class="pill s-{{ r.status }}">{{ r.status|label }}</span></td>
+  </tr>
+  {% else %}
+  <tr><td colspan="5" class="muted">No jobs match these filters.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{% if pages > 1 %}
+<nav class="pager">
+  {% if page > 1 %}<a class="btn" href="{{ page_url(page - 1) }}">← Previous</a>{% endif %}
+  {% if page < pages %}<a class="btn" href="{{ page_url(page + 1) }}">Next →</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

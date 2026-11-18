@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel, Field
@@ -20,7 +21,7 @@ class GitHubList(BaseModel):
     repo: str
     branch: str = "dev"
     path: str = ".github/scripts/listings.json"
-    kind: str = "internship"  # internship | new_grad
+    kind: Literal["internship", "new_grad"] = "internship"
 
 
 class SourceToggle(BaseModel):
@@ -56,20 +57,20 @@ class Sources(BaseModel):
 
 
 class MatchingSettings(BaseModel):
-    engine: str = "local"  # local (free, offline) | claude (needs ANTHROPIC_API_KEY)
-    min_score: int = 50  # jobs at or above this move to "matched"
+    engine: Literal["local", "claude"] = "local"  # local (free, offline) | claude (needs ANTHROPIC_API_KEY)
+    min_score: int = Field(50, ge=0, le=100)  # jobs at or above this move to "matched"
     claude_model: str = "claude-haiku-5-5"
-    claude_concurrency: int = 4
-    claude_max_jobs_per_run: int = 200
-    claude_spend_cap_usd: float = 1.00  # stop a run once estimated cost reaches this
-    enrich_per_run: int = 300  # descriptions to fetch per `jobpilot enrich`
+    claude_concurrency: int = Field(4, ge=1, le=16)
+    claude_max_jobs_per_run: int = Field(200, ge=1)
+    claude_spend_cap_usd: float = Field(1.00, ge=0)  # stop a run once estimated cost reaches this
+    enrich_per_run: int = Field(300, ge=0)  # descriptions to fetch per `jobpilot enrich`
 
 
 class Settings(BaseModel):
     user_agent: str = "JobPilot/0.1 (personal job search assistant; respects robots.txt)"
-    min_seconds_between_requests: float = 1.0  # per host; robots.txt Crawl-delay wins if larger
-    request_timeout_seconds: float = 30.0
-    max_age_days: int = 60  # skip postings older than this (when the source gives a date)
+    min_seconds_between_requests: float = Field(1.0, ge=0.5)  # per host, at least 0.5; robots.txt Crawl-delay wins if larger
+    request_timeout_seconds: float = Field(30.0, gt=0, le=300)
+    max_age_days: int = Field(60, ge=1)  # skip postings older than this (when the source gives a date)
     filter_by_profile: bool = True  # only keep jobs matching your role types / fields
     sources: Sources = Field(default_factory=Sources)
     matching: MatchingSettings = Field(default_factory=MatchingSettings)

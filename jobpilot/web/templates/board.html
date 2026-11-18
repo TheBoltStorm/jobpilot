@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Board{% endblock %}
+{% block content %}
+<h1>Status board</h1>
+<p class="muted">{{ total }} jobs stored. Click a bucket to see its jobs.</p>
+
+<ol class="buckets">
+  {% for s in STATUSES %}
+  <li class="bucket b-{{ s.key }}{% if not counts.get(s.key) %} empty{% endif %}">
+    <a href="/jobs?status={{ s.key }}" title="{{ s.hint }}">
+      <span class="n">{{ counts.get(s.key, 0) }}</span>
+      <span class="l">{{ s.label }}</span>
+    </a>
+  </li>
+  {% endfor %}
+</ol>
+
+<div class="grid2">
+  <section class="card">
+    <div class="card-head">
+      <h2>Next to review</h2>
+      {% if queue %}<a class="btn primary" href="/review">Start reviewing</a>{% endif %}
+    </div>
+    {% if counts.get('matched') %}
+    <form method="post" action="/prepare" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <p class="muted">{{ counts.get('matched') }} matched jobs haven't been prepared yet. Preparing sorts them into
+        Ready to fill / Needs human / Custom site. Nothing is filled or sent.</p>
+      <button class="btn">Prepare all matched jobs</button>
+    </form>
+    {% endif %}
+    {% if queue %}
+    <table class="tight">
+      <thead><tr><th>Score</th><th>Job</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for r in queue %}
+        <tr>
+          <td class="num">{{ r.score if r.score is not none else '–' }}</td>
+          <td><a href="/jobs/{{ r.id }}">{{ r.title }}</a> <span class="muted">· {{ r.company }}</span>
+            {% if r.skipped_at %}<span class="tag">skipped</span>{% endif %}</td>
+          <td><span class="pill s-{{ r.status }}">{{ r.status|label }}</span></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">Nothing waiting. Run <code>jobpilot discover</code>, <code>jobpilot enrich</code> and
+      <code>jobpilot match</code> to find more.</p>
+    {% endif %}
+    {% if undescribed %}<p class="muted small">{{ undescribed }} jobs still have no description, so they can't be judged yet.
+      <code>jobpilot enrich</code> fetches them where possible.</p>{% endif %}
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Recent activity</h2>
+      <span class="exports">Applications log: <a href="/export/applications.csv">CSV</a> · <a href="/export/applications.xlsx">Excel</a></span>
+    </div>
+    {% if recent %}
+    <ul class="events">
+      {% for e in recent %}
+      <li><span class="muted small">{{ e.at|day }}</span>
+        <a href="/jobs/{{ e.job_id }}">{{ e.title }}</a> <span class="muted">· {{ e.company }}</span><br>
+        <span class="who-{{ e.actor }}">{{ 'You' if e.actor == 'user' else 'JobPilot' }}</span> {{ e.action }}
+        {% if e.to_status and e.action != e.to_status %}→ {{ e.to_status|label }}{% endif %}
+        {% if e.note %}<span class="muted">({{ e.note }})</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="muted">No activity yet.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

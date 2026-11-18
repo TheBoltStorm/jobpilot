@@ -14,8 +14,8 @@ All personal data stays on your machine, in `data/` (gitignored).
 | 1 | Onboarding + resume parsing | ✅ done |
 | 2 | Job discovery sources + dedupe | ✅ done |
 | 3 | Matching + skill-gap report | ✅ done (free local engine; Claude optional) |
-| 4 | Review dashboard | next |
-| 5 | Autofill (Greenhouse, dry run) | planned |
+| 4 | Review dashboard | ✅ done |
+| 5 | Autofill (Greenhouse, dry run) | next |
 | 6 | Scaling + polish | planned |
 
 ## Setup
@@ -83,6 +83,40 @@ when your profile says so, and the breakdown quotes the line. Jobs without a des
 low-confidence, title-only estimate. Details, and the optional Claude engine (needs an API key;
 spending is capped and logged), are in [docs/MATCHING.md](docs/MATCHING.md).
 
+## Reviewing in the dashboard
+
+```bash
+jobpilot prepare            # sort matched jobs into Ready to fill / Needs human / Custom site
+jobpilot dashboard          # opens http://127.0.0.1:8765 (only reachable from this computer)
+jobpilot export applications.xlsx   # applications log (.csv or .xlsx), no answers included
+```
+
+The dashboard has:
+
+- **Board.** Counts for every status, from Found to Submitted, plus what to review next.
+- **Review page** for each job:
+  - its description, match score and skill gaps;
+  - every field autofill would type, next to where the value came from (your profile, your resume, or you);
+  - DRAFT written answers and private notes;
+  - **Approve**, **Save edits**, **Skip** and **Reject** buttons.
+- **Jobs.** Filter by status, field, type, score or search text.
+- **Skill gaps.** The gap report, exportable to Markdown or CSV.
+- **Run log.** Every discovery and scoring run, with Claude costs.
+- **Settings.** Sources, filters, the scoring engine and rate limits.
+
+How the gate works:
+
+- Fields JobPilot can't fill from your profile show as `NEEDS_HUMAN`.
+- Protected questions (work authorization, sponsorship, EEO, salary and so on) are always yours to
+  answer. Your answers stay on that one application and never go into your profile.
+- Approving needs a tick in "I've checked every field and draft above", and it records exactly what you approved.
+- Changing anything after you approve withdraws the approval.
+- Only you can approve, reject, or mark a job submitted. The code refuses those moves from anything else,
+  and there's no setting to change that (see [`jobpilot/review/status.py`](jobpilot/review/status.py)).
+
+The dashboard only answers on 127.0.0.1. Every button needs a token that's created when it starts,
+and requests from other websites are refused, so a page you visit can't press Approve for you.
+
 ### Commands
 
 | Command | Does |
@@ -103,6 +137,9 @@ spending is capped and logged), are in [docs/MATCHING.md](docs/MATCHING.md).
 | `jobpilot matches [--min-score N] [--type T] [--location X] [--field F] [--since DATE] [--with-description]` | Filtered list of scored jobs. |
 | `jobpilot gaps [--field F] [--min-score N] [--top N] [--export FILE]` | Skill Gap Report. |
 | `jobpilot runs` | Scoring run log with token cost. |
+| `jobpilot prepare` | Sort matched jobs into Ready to fill / Needs human / Custom site. Fills and sends nothing. |
+| `jobpilot dashboard [--port 8765] [--no-browser]` | Open the local review dashboard. |
+| `jobpilot export FILE.csv\|FILE.xlsx` | Export the applications log (no answers or personal details). |
 
 ## Rules JobPilot follows
 
@@ -115,7 +152,8 @@ spending is capped and logged), are in [docs/MATCHING.md](docs/MATCHING.md).
    stored in the profile and never auto-filled. The profile refuses to save them
    (see [`jobpilot/core/protected.py`](jobpilot/core/protected.py)).
 4. **No CAPTCHA solving, no bot-detection workarounds, no accounts created for you.**
-5. **Polite sources only.** Public APIs and feeds that allow it, rate-limited, robots.txt respected.
+5. **Polite sources only.** Public APIs and feeds that allow it, rate-limited (never faster than one request
+   per 0.5 s per site), robots.txt respected.
    No LinkedIn/Indeed scraping.
 6. **Local data.** SQLite + `profile.yaml` under `data/`. Keys only in `.env`.
 
@@ -139,6 +177,8 @@ jobpilot/
   sources/               one module per source + base.py, dedupe.py, companies seed list
   enrich.py              fetch missing descriptions via public ATS APIs
   matching/              skills.yaml list, local scorer, optional Claude engine, gap report
+  review/                statuses + the human gate, application plans, applications log export
+  web/                   dashboard (FastAPI, templates, static)
   onboarding/
     resume_parser.py     PDF/DOCX -> text -> sections -> structured data (with source lines)
     profile.py           profile.yaml schema (pydantic)

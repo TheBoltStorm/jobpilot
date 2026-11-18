@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Run log{% endblock %}
+{% block content %}
+<h1>Run log</h1>
+
+<section class="card">
+  <div class="card-head"><h2>Scoring runs</h2><span>Total spent on Claude: <b>${{ '%.4f'|format(spent) }}</b></span></div>
+  {% if match_runs %}
+  <table class="tight">
+    <thead><tr><th>Started</th><th>Engine</th><th class="num">Jobs</th><th class="num">Tokens in</th><th class="num">Tokens out</th><th class="num">Cost</th><th>Error</th></tr></thead>
+    <tbody>
+    {% for r in match_runs %}
+      <tr><td class="nowrap small">{{ r.started_at[:19]|replace('T', ' ') }}</td><td>{{ r.engine }}</td>
+        <td class="num">{{ r.jobs_scored }}</td><td class="num">{{ '{:,}'.format(r.input_tokens) }}</td>
+        <td class="num">{{ '{:,}'.format(r.output_tokens) }}</td>
+        <td class="num">{{ 'free' if r.engine == 'local' else '$%.4f'|format(r.cost_usd) }}</td>
+        <td class="small err-text">{{ r.error or '' }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">No scoring runs yet.</p>{% endif %}
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>Discovery runs</h2>{% if errors %}<span class="err-text">{{ errors }} with errors</span>{% endif %}</div>
+  {% if source_runs %}
+  <table class="tight">
+    <thead><tr><th>Started</th><th>Source</th><th class="num">Fetched</th><th class="num">Kept</th><th class="num">New</th><th class="num">Merged</th><th class="num">Closed</th><th>Error</th></tr></thead>
+    <tbody>
+    {% for r in source_runs %}
+      <tr><td class="nowrap small">{{ r.started_at[:19]|replace('T', ' ') }}</td><td class="small">{{ r.source }}:{{ r.scope }}</td>
+        <td class="num">{{ r.fetched }}</td><td class="num">{{ r.kept }}</td><td class="num">{{ r.new }}</td>
+        <td class="num">{{ r.merged }}</td><td class="num">{{ r.closed }}</td>
+        <td class="small err-text">{{ (r.error or '')[:120] }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted small">Showing the latest 150.</p>
+  {% else %}<p class="muted">No discovery runs yet. Run <code>jobpilot discover</code>.</p>{% endif %}
+</section>
+{% endblock %}

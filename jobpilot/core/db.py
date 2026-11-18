@@ -107,6 +107,36 @@ MIGRATIONS: list[str] = [
         error          TEXT
     );
     """,
+    # v4: application review (what would be filled, your edits, approvals) and an event log
+    """
+    CREATE TABLE applications (
+        job_id        INTEGER PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
+        resume_label  TEXT NOT NULL DEFAULT '',
+        fields_json   TEXT NOT NULL DEFAULT '[]',
+        drafts_json   TEXT NOT NULL DEFAULT '[]',
+        notes         TEXT NOT NULL DEFAULT '',
+        prepared_at   TEXT,
+        approved_at   TEXT,
+        approved_snapshot TEXT,             -- exactly what you approved; autofill may only use this
+        filled_at     TEXT,
+        submitted_at  TEXT,
+        rejected_at   TEXT,
+        skipped_at    TEXT,
+        updated_at    TEXT NOT NULL
+    );
+
+    CREATE TABLE application_events (
+        id          INTEGER PRIMARY KEY,
+        job_id      INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+        at          TEXT NOT NULL,
+        actor       TEXT NOT NULL,          -- user | system
+        action      TEXT NOT NULL,
+        from_status TEXT NOT NULL DEFAULT '',
+        to_status   TEXT NOT NULL DEFAULT '',
+        note        TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX application_events_job ON application_events(job_id);
+    """,
 ]
 
 

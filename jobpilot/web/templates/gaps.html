@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Skill gaps{% endblock %}
+{% block content %}
+<h1>Skill Gap Report</h1>
+<form class="filters" method="get" action="/gaps" data-autosubmit>
+  <label>Field
+    <select name="field"><option value="">All fields</option>
+      {% for f in fields %}<option {% if field == f %}selected{% endif %}>{{ f }}</option>{% endfor %}
+    </select></label>
+  <label>Min score <input type="number" name="min_score" min="0" max="100" value="{{ min_score }}" class="w4"></label>
+  <noscript><button class="btn">Update</button></noscript>
+  <span class="exports">Export: <a href="/gaps/export.md?{{ export_qs }}">Markdown</a> · <a href="/gaps/export.csv?{{ export_qs }}">CSV</a></span>
+</form>
+
+{% if not total %}
+  <p class="muted">No matched jobs with descriptions yet. Run <code>jobpilot enrich</code> and <code>jobpilot match</code>, or lower the minimum score.</p>
+{% else %}
+<p class="muted">Across {{ total }} matched jobs with descriptions (score {{ min_score }}+{% if field %}, field “{{ field }}”{% endif %}).
+  Ranked by how often each skill is asked for: required counts fully, preferred half, a mention a quarter.</p>
+
+<div class="grid2 wide-left">
+<section class="card">
+  <h2>Skills you're missing</h2>
+  {% set top = (missing[0].weight if missing else 1) %}
+  <table class="gaps">
+    <thead><tr><th>#</th><th>Skill</th><th class="num">Jobs</th><th class="num">Required</th><th>How to learn it</th></tr></thead>
+    <tbody>
+    {% for g in missing[:40] %}
+      <tr>
+        <td class="num muted">{{ loop.index }}</td>
+        <td><b>{{ g.name }}</b><div class="muted small">{{ g.category }}</div>
+          <div class="bar" style="--w: {{ (100 * g.weight / top)|round(1) }}%"></div></td>
+        <td class="num">{{ g.jobs }}</td>
+        <td class="num">{{ g.required_in }}</td>
+        <td class="small">{{ g.learn }}
+          {% if g.example_jobs %}<div class="muted">e.g. {{ g.example_jobs|join('; ') }}</div>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<aside>
+  {% if partial %}
+  <section class="card">
+    <h2>You partly have</h2>
+    <p class="muted small">Related experience or coursework only. Worth strengthening.</p>
+    <ul class="plain">
+      {% for g in partial[:15] %}<li><b>{{ g.name }}</b> <span class="muted">· {{ g.jobs }} jobs, required in {{ g.required_in }}</span></li>{% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+  {% if by_field %}
+  <section class="card">
+    <h2>Missing, by field</h2>
+    {% for tag, gs in by_field.items() %}
+      <p><b>{{ tag }}</b>: {% for g in gs[:6] %}{{ g.name }} <span class="muted">({{ g.by_field[tag] }})</span>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+    {% endfor %}
+  </section>
+  {% endif %}
+</aside>
+</div>
+{% endif %}
+{% endblock %}
