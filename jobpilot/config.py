@@ -34,6 +34,14 @@ class Paths:
         return self.home / "jobpilot.db"
 
     @property
+    def settings(self) -> Path:
+        return self.home / "settings.yaml"
+
+    @property
+    def companies(self) -> Path:
+        return self.home / "companies.yaml"
+
+    @property
     def resumes(self) -> Path:
         return self.home / "resumes"
 

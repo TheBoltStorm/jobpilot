@@ -22,6 +22,59 @@ MIGRATIONS: list[str] = [
         added_at    TEXT NOT NULL
     );
     """,
+    # v2: discovered jobs
+    """
+    CREATE TABLE jobs (
+        id           INTEGER PRIMARY KEY,
+        dedupe_key   TEXT NOT NULL UNIQUE,
+        company_key  TEXT NOT NULL,
+        url_key      TEXT NOT NULL,
+        title        TEXT NOT NULL,
+        company      TEXT NOT NULL,
+        location     TEXT NOT NULL DEFAULT '',
+        remote       TEXT NOT NULL DEFAULT '',
+        role_type    TEXT NOT NULL DEFAULT '',
+        field        TEXT NOT NULL DEFAULT '',
+        url          TEXT NOT NULL,
+        apply_url    TEXT NOT NULL DEFAULT '',
+        ats          TEXT NOT NULL DEFAULT '',
+        description  TEXT NOT NULL DEFAULT '',
+        date_posted  TEXT NOT NULL DEFAULT '',
+        date_found   TEXT NOT NULL,
+        last_seen    TEXT NOT NULL,
+        status       TEXT NOT NULL DEFAULT 'found'
+    );
+    CREATE INDEX jobs_company ON jobs(company_key);
+    CREATE INDEX jobs_url ON jobs(url_key);
+    CREATE INDEX jobs_status ON jobs(status);
+
+    CREATE TABLE job_sources (
+        job_id     INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+        source     TEXT NOT NULL,
+        scope      TEXT NOT NULL,
+        source_id  TEXT NOT NULL,
+        url        TEXT NOT NULL,
+        active     INTEGER NOT NULL DEFAULT 1,
+        first_seen TEXT NOT NULL,
+        last_seen  TEXT NOT NULL,
+        PRIMARY KEY (source, scope, source_id)
+    );
+    CREATE INDEX job_sources_job ON job_sources(job_id);
+
+    CREATE TABLE source_runs (
+        id          INTEGER PRIMARY KEY,
+        source      TEXT NOT NULL,
+        scope       TEXT NOT NULL,
+        started_at  TEXT NOT NULL,
+        finished_at TEXT,
+        fetched     INTEGER NOT NULL DEFAULT 0,
+        kept        INTEGER NOT NULL DEFAULT 0,
+        new         INTEGER NOT NULL DEFAULT 0,
+        merged      INTEGER NOT NULL DEFAULT 0,
+        closed      INTEGER NOT NULL DEFAULT 0,
+        error       TEXT
+    );
+    """,
 ]
 
 

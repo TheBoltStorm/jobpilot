@@ -106,6 +106,150 @@ def cmd_profile(args) -> int:
     return 0
 
 
+def _discovery_context(args):
+    from jobpilot.onboarding.profile import load_profile
+    from jobpilot.settings import load_settings
+    from jobpilot.sources.companies import load_companies
+
+    paths = get_paths(args.home)
+    settings = load_settings(paths.settings)
+    profile = load_profile(paths.profile)
+    return paths, settings, profile, load_companies(paths.companies)
+
+
+def _make_sources(settings, profile, companies, only=None):
+    from jobpilot.core.http import PoliteClient
+    from jobpilot.sources import ALL_SOURCES
+
+    http = PoliteClient(settings.user_agent, settings.min_seconds_between_requests, settings.request_timeout_seconds)
+    classes = [s for s in ALL_SOURCES if not only or s.name in only]
+    return http, [cls(http, settings, profile, companies) for cls in classes]
+
+
+def cmd_companies(args) -> int:
+    from jobpilot.sources.companies import load_companies, save_companies, starter_companies
+    from jobpilot.onboarding.profile import load_profile
+
+    paths = get_paths(args.home)
+    if args.action == "init":
+        if paths.companies.is_file() and not args.force:
+            print(f"{paths.companies} already exists. Use --force to overwrite it.", file=sys.stderr)
+            return 1
+        profile = load_profile(paths.profile)
+        fields = profile.targets.fields + profile.targets.roles if profile else []
+        companies = starter_companies(fields)
+        save_companies(companies, paths.companies)
+        print(f"Wrote {len(companies)} companies to {paths.companies}"
+              + (f" (matched to: {', '.join(fields)})" if fields else " (no target fields in profile, so all of them)"))
+        print("Edit that file to add or remove companies.")
+        return 0
+    companies = load_companies(paths.companies)
+    if not companies:
+        print("No companies yet. Run `jobpilot companies init`.")
+    for c in companies:
+        print(f"{c.ats:<11} {c.token:<18} {c.name:<22} {', '.join(c.fields)}")
+    return 0
+
+
+def cmd_sources(args) -> int:
+    paths, settings, profile, companies = _discovery_context(args)
+    http, sources = _make_sources(settings, profile, companies)
+    for s in sources:
+        ok, why = s.enabled()
+        print(f"[{'on ' if ok else 'off'}] {s.name:<13} {s.label}" + (f"  ({why})" if why else ""))
+        print(f"      {s.terms_note}")
+    http.close()
+    print("\nNot included on purpose (see docs/SOURCES.md): LinkedIn, Indeed, Glassdoor, ZipRecruiter.")
+    return 0
+
+
+def cmd_discover(args) -> int:
+    from jobpilot.discovery import run_discovery
+
+    paths, settings, profile, companies = _discovery_context(args)
+    if profile is None:
+        print("No profile yet, so jobs won't be filtered to your targets. Run `jobpilot onboard` first for better results.")
+    if not companies:
+        print("No companies.yaml yet; run `jobpilot companies init` to add company job boards.")
+    http, sources = _make_sources(settings, profile, companies, args.source)
+    print("Discovering jobs (rate-limited; this can take a few minutes)...")
+    try:
+        with db.connect(paths.db) as conn:
+            summaries = run_discovery(conn, sources, settings, profile)
+            total = conn.execute("SELECT COUNT(*) FROM jobs WHERE status != 'posting_closed'").fetchone()[0]
+    finally:
+        http.close()
+    new = sum(s.new for s in summaries)
+    merged = sum(s.merged for s in summaries)
+    closed = sum(s.closed for s in summaries)
+    errors = [s for s in summaries if s.error]
+    print(f"\nDone: {new} new jobs, {merged} duplicates merged, {closed} marked closed, "
+          f"{http.requests_made} requests. {total} open jobs stored.")
+    if errors:
+        print(f"{len(errors)} listing(s) failed; see above. Check the company token in companies.yaml.")
+    return 0
+
+
+def cmd_import_csv(args) -> int:
+    from jobpilot.discovery import Filter, store_scope
+    from jobpilot.sources.csv_import import parse_csv
+
+    paths, settings, profile, _ = _discovery_context(args)
+    result = parse_csv(args.path)
+    flt = Filter.build(settings, profile) if args.filter else Filter()
+    with db.connect(paths.db) as conn:
+        s = store_scope(conn, f"csv:{args.name}", result, flt)
+    print(f"Imported {args.path}: {s.fetched} rows, {s.kept} kept, {s.new} new, {s.merged} duplicates merged.")
+    return 0
+
+
+def cmd_jobs(args) -> int:
+    paths = get_paths(args.home)
+    with db.connect(paths.db) as conn:
+        if args.action == "show":
+            row = conn.execute("SELECT * FROM jobs WHERE id = ?", (args.id,)).fetchone()
+            if not row:
+                print("No such job.", file=sys.stderr)
+                return 1
+            for k in ("id", "title", "company", "location", "remote", "role_type", "field", "ats", "status",
+                      "date_posted", "date_found", "url", "apply_url"):
+                if row[k] not in ("", None):
+                    print(f"{k:>12}: {row[k]}")
+            srcs = conn.execute("SELECT source, scope, active FROM job_sources WHERE job_id = ?", (args.id,)).fetchall()
+            print(f"{'sources':>12}: " + ", ".join(f"{s['source']}:{s['scope']}{'' if s['active'] else ' (gone)'}" for s in srcs))
+            print("\n" + (row["description"] or "(no description from this source yet)"))
+            return 0
+        where, params = ["1=1"], []
+        if args.status:
+            where.append("status = ?")
+            params.append(args.status)
+        elif not args.all:
+            where.append("status != 'posting_closed'")
+        for col, val in (("role_type", args.type), ("ats", args.ats)):
+            if val:
+                where.append(f"{col} = ?")
+                params.append(val)
+        if args.search:
+            where.append("(title LIKE ? OR company LIKE ?)")
+            params += [f"%{args.search}%"] * 2
+        sql = f"SELECT * FROM jobs WHERE {' AND '.join(where)} ORDER BY date_posted DESC, id DESC LIMIT ?"
+        rows = conn.execute(sql, (*params, args.limit)).fetchall()
+        count = conn.execute(f"SELECT COUNT(*) FROM jobs WHERE {' AND '.join(where)}", params).fetchone()[0]
+        for r in rows:
+            loc = (r["location"] or "")[:24]
+            print(f"{r['id']:>6}  {r['date_posted'] or '?':<10}  {r['company'][:20]:<20}  {r['title'][:46]:<46}  "
+                  f"{loc:<24}  {r['ats']}")
+        print(f"\nShowing {len(rows)} of {count}. `jobpilot jobs show <id>` for details.")
+        if args.summary:
+            print("\nBy status:")
+            for r in conn.execute("SELECT status, COUNT(*) n FROM jobs GROUP BY status ORDER BY n DESC"):
+                print(f"  {r['status']:<16} {r['n']}")
+            print("By ATS (open jobs):")
+            for r in conn.execute("SELECT ats, COUNT(*) n FROM jobs WHERE status != 'posting_closed' GROUP BY ats ORDER BY n DESC"):
+                print(f"  {r['ats'] or '?':<16} {r['n']}")
+    return 0
+
+
 def cmd_sample(args) -> int:
     from jobpilot.samples import write_sample_docx, write_sample_pdf
 
@@ -145,6 +289,38 @@ def build_parser() -> argparse.ArgumentParser:
     pr = sub.add_parser("profile", help="show, edit or validate profile.yaml")
     pr.add_argument("action", choices=["show", "edit", "validate", "path"])
     pr.set_defaults(func=cmd_profile)
+
+    c = sub.add_parser("companies", help="manage company job boards (data/companies.yaml)")
+    c.add_argument("action", choices=["init", "list"])
+    c.add_argument("--force", action="store_true", help="overwrite existing companies.yaml")
+    c.set_defaults(func=cmd_companies)
+
+    so = sub.add_parser("sources", help="list job sources and whether they're enabled")
+    so.set_defaults(func=cmd_sources)
+
+    d = sub.add_parser("discover", help="fetch new jobs from enabled sources")
+    d.add_argument("--source", action="append", help="only run this source (repeatable)")
+    d.set_defaults(func=cmd_discover)
+
+    ic = sub.add_parser("import-csv", help="import jobs from a CSV you exported (e.g. Handshake)")
+    ic.add_argument("path")
+    ic.add_argument("--name", default="import", help="label for this import, e.g. handshake")
+    ic.add_argument("--no-filter", dest="filter", action="store_false", help="keep every row")
+    ic.set_defaults(func=cmd_import_csv)
+
+    j = sub.add_parser("jobs", help="browse stored jobs")
+    js = j.add_subparsers(dest="action", required=True)
+    jl = js.add_parser("list")
+    jl.add_argument("--status")
+    jl.add_argument("--type", help="internship | co-op | part-time | full-time")
+    jl.add_argument("--ats", help="greenhouse | lever | ashby | workday | other ...")
+    jl.add_argument("--search", help="text in title or company")
+    jl.add_argument("--limit", type=int, default=25)
+    jl.add_argument("--all", action="store_true", help="include closed postings")
+    jl.add_argument("--summary", action="store_true", help="also print counts by status and ATS")
+    jsh = js.add_parser("show")
+    jsh.add_argument("id", type=int)
+    j.set_defaults(func=cmd_jobs)
 
     s = sub.add_parser("sample-resume", help="write a made-up resume to try JobPilot with")
     s.add_argument("--out", default="samples")

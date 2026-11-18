@@ -12,8 +12,8 @@ All personal data stays on your machine, in `data/` (gitignored).
 | Phase | What | State |
 |---|---|---|
 | 1 | Onboarding + resume parsing | ✅ done |
-| 2 | Job discovery sources + dedupe | next |
-| 3 | Matching + skill-gap report | planned (works without an API key; see below) |
+| 2 | Job discovery sources + dedupe | ✅ done |
+| 3 | Matching + skill-gap report | next (works without an API key; see below) |
 | 4 | Review dashboard | planned |
 | 5 | Autofill (Greenhouse, dry run) | planned |
 | 6 | Scaling + polish | planned |
@@ -48,6 +48,25 @@ jobpilot sample-resume            # writes samples/sample_resume.docx and .pdf
 jobpilot onboard --resume samples/sample_resume.pdf
 ```
 
+## Finding jobs
+
+```bash
+jobpilot companies init     # starter list of company job boards matched to your target fields
+jobpilot sources            # what's enabled and why each source is allowed
+jobpilot discover           # fetch, filter to your targets, dedupe (about 1-2 minutes)
+jobpilot jobs list --summary
+```
+
+Discovery pulls from the GitHub internship and new-grad lists (SimplifyJobs, vanshb03) and the
+public Greenhouse, Lever and Ashby job-board APIs. USAJOBS, RSS feeds and CSV imports are optional.
+It keeps only postings that match your role types and target fields, merges the same job seen in
+several places, and marks jobs "posting closed" when they disappear from a full listing.
+See [docs/SOURCES.md](docs/SOURCES.md) for what's included, what's excluded, and why.
+To add a source, see [docs/ADDING_A_SOURCE.md](docs/ADDING_A_SOURCE.md).
+
+Settings (rate limits, max posting age, which lists to read) live in `data/settings.yaml`.
+The companies to check live in `data/companies.yaml`. Both are created on first use and are yours to edit.
+
 ### Commands
 
 | Command | Does |
@@ -56,6 +75,12 @@ jobpilot onboard --resume samples/sample_resume.pdf
 | `jobpilot resume add FILE --label NAME [--default]` | Add another resume version (e.g. `data-science`). |
 | `jobpilot resume list` / `show [NAME]` / `default NAME` | Manage resume versions. `*` marks the default. |
 | `jobpilot profile show` / `edit` / `validate` / `path` | Look at or edit `profile.yaml`. |
+| `jobpilot companies init [--force]` / `list` | Create or show `companies.yaml`. |
+| `jobpilot sources` | List sources, whether each is on, and why it's allowed. |
+| `jobpilot discover [--source NAME]` | Fetch new jobs (all enabled sources, or just one). |
+| `jobpilot import-csv FILE [--name handshake] [--no-filter]` | Import a CSV you exported. |
+| `jobpilot jobs list [--type internship] [--ats greenhouse] [--search text] [--summary]` | Browse stored jobs. |
+| `jobpilot jobs show ID` | Full details, sources and description for one job. |
 
 ## Rules JobPilot follows
 
@@ -84,8 +109,12 @@ for sharper skill extraction and scoring, with token cost shown per run.
 jobpilot/
   cli.py                 command line
   config.py              paths (data/), .env loading
+  settings.py            data/settings.yaml schema
+  discovery.py           run sources -> filter -> dedupe -> store -> close missing
   core/db.py             SQLite + migrations
+  core/http.py           polite HTTP (robots.txt, rate limit, retries)
   core/protected.py      protected-question classifier
+  sources/               one module per source + base.py, dedupe.py, companies seed list
   onboarding/
     resume_parser.py     PDF/DOCX -> text -> sections -> structured data (with source lines)
     profile.py           profile.yaml schema (pydantic)
