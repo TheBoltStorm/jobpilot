@@ -20,14 +20,19 @@ All personal data stays on your machine, in `data/` (gitignored).
 
 ## Setup
 
-Requires Python 3.11+.
+**New to this? Follow [docs/INSTALL.md](docs/INSTALL.md).** It walks through installing Python,
+downloading JobPilot, setting up your profile, and applying to your first job.
+
+Quick version (Python 3.11+, Windows PowerShell; macOS/Linux notes in the guide):
 
 ```bash
-git clone <this repo> jobpilot && cd jobpilot
+git clone https://github.com/TheBoltStorm/jobpilot.git
+cd jobpilot
 python -m venv .venv
-.venv\Scripts\activate          # macOS/Linux: source .venv/bin/activate
-pip install -e ".[dev]"
-copy .env.example .env          # macOS/Linux: cp .env.example .env  (all keys optional)
+.venv\Scripts\Activate.ps1      # macOS/Linux: source .venv/bin/activate
+pip install -e .                # add ".[dev]" to run the tests
+copy .env.example .env          # macOS/Linux: cp; every key is optional
+jobpilot doctor
 ```
 
 ## First run
