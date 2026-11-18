@@ -1,71 +1,81 @@
 {% extends "base.html" %}
 {% block title %}Board{% endblock %}
 {% block content %}
-<h1>Status board</h1>
-<p class="muted">{{ total }} jobs stored. Click a bucket to see its jobs.</p>
+<div class="page-head">
+  <h1>Board</h1>
+  <span class="sub">{{ total }} jobs stored</span>
+  <span class="right small">Applications log: <a href="/export/applications.csv">CSV</a> · <a href="/export/applications.xlsx">Excel</a></span>
+</div>
 
-<ol class="buckets">
-  {% for s in STATUSES %}
-  <li class="bucket b-{{ s.key }}{% if not counts.get(s.key) %} empty{% endif %}">
-    <a href="/jobs?status={{ s.key }}" title="{{ s.hint }}">
-      <span class="n">{{ counts.get(s.key, 0) }}</span>
-      <span class="l">{{ s.label }}</span>
-    </a>
-  </li>
+<div class="stat">
+  <a href="/review"><span class="n">{{ counts.get('ready_to_fill', 0) + counts.get('needs_human', 0) }}</span>
+    <span class="l">waiting for your review</span></a>
+  <a href="/qualify"><span class="n ok">{{ qual_counts.get('qualify', 0) }}</span>
+    <span class="l">you meet the minimums for</span></a>
+  <a href="/qualify?show=close"><span class="n">{{ qual_counts.get('close', 0) }}</span>
+    <span class="l">one requirement short</span></a>
+  <a href="/jobs?status=submitted"><span class="n">{{ counts.get('submitted', 0) }}</span>
+    <span class="l">submitted</span></a>
+</div>
+
+<ol class="buckets" aria-label="Jobs by status">
+  {% for s in STATUSES if counts.get(s.key) %}
+  <li class="bucket b-{{ s.key }}"><a href="/jobs?status={{ s.key }}" title="{{ s.hint }}">
+    <span class="n">{{ counts.get(s.key) }}</span><span class="l">{{ s.label }}</span></a></li>
   {% endfor %}
 </ol>
 
+{% if counts.get('matched') %}
+<form method="post" action="/prepare" class="banner warn">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  {{ counts.get('matched') }} matched jobs aren't prepared yet.
+  <button class="btn small-btn">Prepare them</button>
+  <span class="small">Sorts them into Ready to fill / Needs human / Custom site. Nothing is filled or sent.</span>
+</form>
+{% endif %}
+
 <div class="grid2">
   <section class="card">
-    <div class="card-head">
-      <h2>Next to review</h2>
-      {% if queue %}<a class="btn primary" href="/review">Start reviewing</a>{% endif %}
-    </div>
-    {% if counts.get('matched') %}
-    <form method="post" action="/prepare" class="inline">
-      <input type="hidden" name="csrf" value="{{ csrf }}">
-      <p class="muted">{{ counts.get('matched') }} matched jobs haven't been prepared yet. Preparing sorts them into
-        Ready to fill / Needs human / Custom site. Nothing is filled or sent.</p>
-      <button class="btn">Prepare all matched jobs</button>
-    </form>
-    {% endif %}
+    <div class="card-head"><h2>Next to review</h2>{% if queue %}<a class="btn primary small-btn" href="/review">Start</a>{% endif %}</div>
     {% if queue %}
-    <table class="tight">
-      <thead><tr><th>Score</th><th>Job</th><th>Status</th></tr></thead>
-      <tbody>
+    <ul class="list">
       {% for r in queue %}
-        <tr>
-          <td class="num">{{ r.score if r.score is not none else '–' }}</td>
-          <td><a href="/jobs/{{ r.id }}">{{ r.title }}</a> <span class="muted">· {{ r.company }}</span>
-            {% if r.skipped_at %}<span class="tag">skipped</span>{% endif %}</td>
-          <td><span class="pill s-{{ r.status }}">{{ r.status|label }}</span></td>
-        </tr>
+      <li><span class="score sc-{{ (r.score or 0) // 25 }}">{{ r.score if r.score is not none else '–' }}</span>
+        <span class="grow clip"><a href="/jobs/{{ r.id }}">{{ r.title }}</a> <span class="muted">· {{ r.company }}</span></span>
+        {% if r.skipped_at %}<span class="tag">skipped</span>{% endif %}
+        <span class="pill s-{{ r.status }}">{{ r.status|label }}</span></li>
       {% endfor %}
-      </tbody>
-    </table>
+    </ul>
     {% else %}
-    <p class="muted">Nothing waiting. Run <code>jobpilot discover</code>, <code>jobpilot enrich</code> and
-      <code>jobpilot match</code> to find more.</p>
+    <p class="muted">Nothing waiting. Run <code>jobpilot run</code> to find and prepare more.</p>
     {% endif %}
-    {% if undescribed %}<p class="muted small">{{ undescribed }} jobs still have no description, so they can't be judged yet.
-      <code>jobpilot enrich</code> fetches them where possible.</p>{% endif %}
   </section>
 
   <section class="card">
-    <div class="card-head"><h2>Recent activity</h2>
-      <span class="exports">Applications log: <a href="/export/applications.csv">CSV</a> · <a href="/export/applications.xlsx">Excel</a></span>
-    </div>
-    {% if recent %}
-    <ul class="events">
-      {% for e in recent %}
-      <li><span class="muted small">{{ e.at|day }}</span>
-        <a href="/jobs/{{ e.job_id }}">{{ e.title }}</a> <span class="muted">· {{ e.company }}</span><br>
-        <span class="who-{{ e.actor }}">{{ 'You' if e.actor == 'user' else 'JobPilot' }}</span> {{ e.action }}
-        {% if e.to_status and e.action != e.to_status %}→ {{ e.to_status|label }}{% endif %}
-        {% if e.note %}<span class="muted">({{ e.note }})</span>{% endif %}</li>
+    <div class="card-head"><h2>You qualify</h2><a class="small" href="/qualify">See all →</a></div>
+    {% if qualify %}
+    <ul class="list">
+      {% for r in qualify %}
+      <li><span class="score sc-{{ (r.score or 0) // 25 }}">{{ r.score if r.score is not none else '–' }}</span>
+        <span class="grow clip"><a href="/jobs/{{ r.id }}">{{ r.title }}</a> <span class="muted">· {{ r.company }}</span></span></li>
       {% endfor %}
     </ul>
-    {% else %}<p class="muted">No activity yet.</p>{% endif %}
+    {% else %}<p class="muted">No open jobs where you meet every minimum yet.</p>{% endif %}
+    {% if undescribed %}<p class="muted small">{{ undescribed }} jobs have no description yet, so they can't be checked.</p>{% endif %}
   </section>
 </div>
+
+<details class="card" {% if not queue %}open{% endif %}>
+  <summary>Recent activity</summary>
+  {% if recent %}
+  <ul class="events">
+    {% for e in recent %}
+    <li><span class="muted small">{{ e.at|day }}</span>
+      <span class="who-{{ e.actor }}">{{ 'You' if e.actor == 'user' else 'JobPilot' }}</span> {{ e.action }}
+      {% if e.to_status and e.action != e.to_status %}→ {{ e.to_status|label }}{% endif %}
+      · <a href="/jobs/{{ e.job_id }}">{{ e.title }}</a> <span class="muted">({{ e.company }})</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="muted">No activity yet.</p>{% endif %}
+</details>
 {% endblock %}

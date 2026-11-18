@@ -1,0 +1,89 @@
+{# Shared pieces for the job lists. #}
+
+{% macro place_select(f, facets) %}
+<select name="area" aria-label="Area">
+  <option value="">Any area</option>
+  {% for region, n, area_list in facets %}
+  <optgroup label="{{ region }} ({{ n }})">
+    {% for a, c in area_list[:40] %}<option value="{{ a }}" {% if f.area == a %}selected{% endif %}>{{ a }} ({{ c }})</option>{% endfor %}
+  </optgroup>
+  {% endfor %}
+</select>
+{% endmacro %}
+
+{% macro region_chips(base, f, facets) %}
+{# Region chips: click to filter, click again to clear. Keeps the other filters. #}
+<ul class="chips" aria-label="Regions">
+  {% set keep = {} %}
+  {% for k, v in f.items() if v and k not in ('region', 'area', 'page') %}{% set _ = keep.update({k: v}) %}{% endfor %}
+  <li><a class="chip" href="{{ base }}?{{ keep|urlencode }}" {% if not f.region and not f.area %}aria-current="true"{% endif %}>All places</a></li>
+  {% for region, n, _ in facets %}
+    {% set q = dict(keep, region=region) %}
+    <li><a class="chip" href="{{ base }}?{{ (keep if f.region == region else q)|urlencode }}"
+      {% if f.region == region %}aria-current="true"{% endif %}>{{ region }} <b>{{ n }}</b></a></li>
+  {% endfor %}
+</ul>
+{% endmacro %}
+
+{% macro filter_bar(action, f, facets, fields, types, extra='') %}
+<form class="filters" method="get" action="{{ action }}" data-autosubmit>
+  {% for k in ('show', 'region') %}{% if f.get(k) %}<input type="hidden" name="{{ k }}" value="{{ f[k] }}">{% endif %}{% endfor %}
+  <input type="search" name="q" value="{{ f.q }}" placeholder="Search title, company or city" aria-label="Search">
+  {{ place_select(f, facets) }}
+  <select name="field" aria-label="Field"><option value="">Any field</option>
+    {% for x in fields %}<option value="{{ x }}" {% if f.field == x %}selected{% endif %}>{{ x|capitalize }}</option>{% endfor %}</select>
+  <select name="type" aria-label="Type"><option value="">Any type</option>
+    {% for t in types %}<option {% if f.type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select>
+  {{ extra }}
+  <select name="sort" aria-label="Sort">
+    <option value="score" {% if f.sort == 'score' %}selected{% endif %}>Best match</option>
+    <option value="date" {% if f.sort == 'date' %}selected{% endif %}>Newest</option>
+    <option value="company" {% if f.sort == 'company' %}selected{% endif %}>Company</option>
+  </select>
+  <noscript><button class="btn">Filter</button></noscript>
+  <a href="{{ action }}{% if f.get('show') %}?show={{ f.show }}{% endif %}" class="small">Clear</a>
+</form>
+{% endmacro %}
+
+{% macro job_rows(rows, areas, checks, mode='all') %}
+<div class="table-wrap">
+<table class="jobs">
+  <thead><tr><th class="num">Score</th><th>Job</th><th class="loc">Where</th><th class="hide-sm">Posted</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr>
+    <td class="num">{% if r.score is not none %}<span class="score sc-{{ r.score // 25 }}"
+        {% if r.confidence == 'low' %}title="Rough estimate: no description yet"{% endif %}>{{ r.score }}{% if r.confidence == 'low' %}<span class="muted">?</span>{% endif %}</span>{% else %}<span class="muted">–</span>{% endif %}</td>
+    <td>
+      <a class="t" href="/jobs/{{ r.id }}">{{ r.title }}</a>
+      {% if mode == 'all' and r.qual == 'qualify' %}<span class="tag q-qualify" title="You meet every minimum requirement found">qualify</span>{% endif %}
+      <div class="meta">{{ r.company }}{% if r.role_type %} · {{ r.role_type }}{% endif %}</div>
+      {% if mode in ('qualify', 'close') %}
+        {% set cs = checks(r) %}
+        <div class="req">
+          {% for c in cs if c.ok is false %}<span class="no" title="{{ c.detail }}">✗ {{ c.what }}</span>{% endfor %}
+          {% for c in cs if c.ok %}<span title="{{ c.detail }}">✓ {{ c.what }}</span>{% endfor %}
+        </div>
+      {% elif r.reason %}<div class="meta clip" title="{{ r.reason }}">{{ r.reason }}</div>{% endif %}
+    </td>
+    <td class="loc" title="{{ r.location }}">{{ areas.get(r.id, r.location or '–') }}</td>
+    <td class="small nowrap muted hide-sm">{{ r.date_posted or '–' }}</td>
+    <td><span class="pill s-{{ r.status }}">{{ r.status|label }}</span></td>
+  </tr>
+  {% else %}
+  <tr><td colspan="5" class="muted">No jobs match these filters.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endmacro %}
+
+{% macro pager(page, pages, page_url) %}
+{% if pages > 1 %}
+<nav class="pager">
+  {% if page > 1 %}<a class="btn" href="{{ page_url(page - 1) }}">← Prev</a>{% endif %}
+  <span class="muted small">Page {{ page }} of {{ pages }}</span>
+  {% if page < pages %}<a class="btn" href="{{ page_url(page + 1) }}">Next →</a>{% endif %}
+</nav>
+{% endif %}
+{% endmacro %}

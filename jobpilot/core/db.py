@@ -171,6 +171,27 @@ MIGRATIONS: list[str] = [
         approved_at   TEXT,
         path          TEXT
     );
+    """,    # v7: where each job is (region / area) and whether you meet its minimum requirements
+    """
+    CREATE TABLE job_places (
+        job_id   INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+        region   TEXT NOT NULL,                -- Remote | US West | ... | Canada | Europe | Unknown
+        area     TEXT NOT NULL,                -- "SF Bay Area", "Pittsburgh, PA", "London, United Kingdom"
+        country  TEXT NOT NULL DEFAULT '',
+        remote   INTEGER NOT NULL DEFAULT 0,
+        src      TEXT NOT NULL                 -- the location text it came from; a change means redo
+    );
+    CREATE INDEX job_places_job ON job_places(job_id);
+    CREATE INDEX job_places_area ON job_places(region, area);
+
+    CREATE TABLE qualifications (
+        job_id      INTEGER PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
+        status      TEXT NOT NULL,             -- qualify | close | not | unknown
+        unmet       INTEGER NOT NULL DEFAULT 0,
+        detail_json TEXT NOT NULL,
+        basis       TEXT NOT NULL              -- profile + score version it was checked against
+    );
+    CREATE INDEX qualifications_status ON qualifications(status);
     """,
 ]
 

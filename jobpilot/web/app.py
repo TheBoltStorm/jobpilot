@@ -94,21 +94,118 @@ def create_app(paths: Paths) -> FastAPI:
     def settings() -> Settings:
         return load_settings(paths.settings)
 
+    # ------------------------------------------------------------ shared
+
+    FIELDS = ["software", "data", "product", "hardware", "quant", "security", "design"]
+
+    def refresh_indexes(conn, profile=None) -> None:
+        """Keep the place index and minimum-requirement checks current (cheap when nothing changed)."""
+        from jobpilot.core import places
+        from jobpilot.matching import minimums
+
+        places.refresh(conn)
+        minimums.refresh(conn, profile if profile is not None else load_profile(paths.profile))
+
+    def job_where(f: dict) -> tuple[str, list]:
+        """WHERE clause shared by the Jobs and You qualify pages (jobs j, matches m)."""
+        from jobpilot.core import places
+
+        where, params = ["1=1"], []
+        if f.get("status"):
+            where.append("j.status = ?")
+            params.append(f["status"])
+        else:
+            where.append("j.status NOT IN ('posting_closed', 'rejected')")
+        if f.get("q"):
+            where.append("(j.title LIKE ? OR j.company LIKE ? OR j.location LIKE ?)")
+            params += [f"%{f['q']}%"] * 3
+        if f.get("field"):
+            where.append("(',' || COALESCE(m.tags, '') || ',') LIKE ?")
+            params.append(f"%,{f['field']},%")
+        if f.get("type"):
+            where.append("j.role_type = ?")
+            params.append(f["type"])
+        if str(f.get("min_score", "")).strip().isdigit():
+            where.append("m.score >= ?")
+            params.append(int(f["min_score"]))
+        if f.get("described"):
+            where.append("j.description != ''")
+        place_sql, place_params = places.sql_filter(f.get("region", ""), f.get("area", ""))
+        if place_sql:
+            where.append(place_sql)
+            params += place_params
+        return " AND ".join(where), params
+
+    SORTS = {"score": "m.score IS NULL, m.score DESC, j.date_posted DESC",
+             "date": "j.date_posted DESC, j.id DESC", "company": "j.company COLLATE NOCASE, j.title"}
+
+    def list_page(request, template: str, base_url: str, f: dict, extra_where: str = "", page: int = 1, **ctx):
+        from jobpilot.core import places
+
+        sql_where, params = job_where(f)
+        if extra_where:
+            sql_where += " AND " + extra_where
+        order = SORTS.get(f.get("sort", ""), SORTS["score"])
+        page = max(1, page)
+        with db.connect(paths.db) as conn:
+            refresh_indexes(conn)
+            base = "FROM jobs j LEFT JOIN matches m ON m.job_id = j.id LEFT JOIN qualifications q ON q.job_id = j.id"
+            total = conn.execute(f"SELECT COUNT(*) {base} WHERE {sql_where}", params).fetchone()[0]
+            rows = conn.execute(
+                f"""SELECT j.id, j.title, j.company, j.location, j.remote, j.role_type, j.status, j.date_posted, j.ats,
+                           j.description != '' AS described, m.score, m.confidence, m.reason, m.tags,
+                           q.status AS qual, q.detail_json
+                    {base} WHERE {sql_where} ORDER BY {order} LIMIT ? OFFSET ?""",
+                (*params, PAGE_SIZE, (page - 1) * PAGE_SIZE)).fetchall()
+            areas = {r["job_id"]: r["areas"] for r in conn.execute(
+                f"""SELECT job_id, GROUP_CONCAT(area, ' · ') areas FROM job_places
+                    WHERE job_id IN ({','.join(str(r['id']) for r in rows) or '0'}) GROUP BY job_id""")}
+            types = [r[0] for r in conn.execute("SELECT DISTINCT role_type FROM jobs WHERE role_type != '' ORDER BY 1")]
+            # Place counts follow every other filter, so the chips say what you'd get.
+            nf = dict(f, region="", area="")
+            facet_where, facet_params = job_where(nf)
+            if extra_where:
+                facet_where += " AND " + extra_where
+            facets = places.facets(conn, facet_where, facet_params)
+            qual_counts = dict(conn.execute(
+                """SELECT q.status, COUNT(*) FROM qualifications q JOIN jobs j ON j.id = q.job_id
+                   WHERE j.status NOT IN ('posting_closed', 'rejected') GROUP BY q.status""").fetchall())
+        pages = max(1, math.ceil(total / PAGE_SIZE))
+
+        def page_url(n: int) -> str:
+            return base_url + "?" + urlencode({**{k: v for k, v in f.items() if v}, "page": n})
+
+        def checks(row) -> list[dict]:
+            return json.loads(row["detail_json"])["checks"] if row["detail_json"] else []
+
+        return render(request, template, rows=rows, total=total, page=page, pages=pages, page_url=page_url,
+                      filters=f, types=types, fields=FIELDS, facets=facets, areas=areas, checks=checks,
+                      qual_counts=qual_counts, **ctx)
+
     # ------------------------------------------------------------ board
 
     @app.get("/", response_class=HTMLResponse)
     def board(request: Request):
         with db.connect(paths.db) as conn:
+            refresh_indexes(conn)
             counts = {r["status"]: r["n"] for r in conn.execute("SELECT status, COUNT(*) n FROM jobs GROUP BY status")}
-            queue = plan.queue(conn, 12)
+            queue = plan.queue(conn, 8)
             recent = conn.execute("""SELECT e.*, j.title, j.company FROM application_events e
                                      JOIN jobs j ON j.id = e.job_id
                                      WHERE NOT (e.actor = 'system' AND e.action = 'prepared')
-                                     ORDER BY e.id DESC LIMIT 12""").fetchall()
+                                     ORDER BY e.id DESC LIMIT 8""").fetchall()
             undescribed = conn.execute("SELECT COUNT(*) FROM jobs WHERE description = '' AND status IN ('found','matched')"
                                        ).fetchone()[0]
+            qualify = conn.execute(
+                """SELECT j.id, j.title, j.company, m.score FROM qualifications q JOIN jobs j ON j.id = q.job_id
+                   LEFT JOIN matches m ON m.job_id = j.id
+                   WHERE q.status = 'qualify' AND j.status IN ('found','matched','ready_to_fill','needs_human')
+                   ORDER BY m.score DESC LIMIT 8""").fetchall()
+            qual_counts = dict(conn.execute(
+                """SELECT q.status, COUNT(*) FROM qualifications q JOIN jobs j ON j.id = q.job_id
+                   WHERE j.status IN ('found','matched','ready_to_fill','needs_human') GROUP BY q.status""").fetchall())
         return render(request, "board.html", counts=counts, total=sum(counts.values()), queue=queue, recent=recent,
-                      undescribed=undescribed, min_score=settings().matching.min_score)
+                      undescribed=undescribed, qualify=qualify, qual_counts=qual_counts)
 
     @app.post("/prepare")
     async def prepare_all(request: Request):
@@ -122,52 +219,21 @@ def create_app(paths: Paths) -> FastAPI:
 
     @app.get("/jobs", response_class=HTMLResponse)
     def jobs(request: Request, status: str = "", q: str = "", field: str = "", type: str = "", min_score: str = "",
-             described: str = "", sort: str = "score", page: int = 1):
-        where, params = ["1=1"], []
-        if status:
-            where.append("j.status = ?")
-            params.append(status)
-        else:
-            where.append("j.status NOT IN ('posting_closed', 'rejected')")
-        if q:
-            where.append("(j.title LIKE ? OR j.company LIKE ? OR j.location LIKE ?)")
-            params += [f"%{q}%"] * 3
-        if field:
-            where.append("(',' || COALESCE(m.tags, '') || ',') LIKE ?")
-            params.append(f"%,{field},%")
-        if type:
-            where.append("j.role_type = ?")
-            params.append(type)
-        if min_score.strip().isdigit():
-            where.append("m.score >= ?")
-            params.append(int(min_score))
-        if described:
-            where.append("j.description != ''")
-        order = {"score": "m.score IS NULL, m.score DESC, j.date_posted DESC",
-                 "date": "j.date_posted DESC, j.id DESC", "company": "j.company COLLATE NOCASE, j.title"}.get(sort)
-        if order is None:
-            order, sort = "m.score IS NULL, m.score DESC", "score"
-        sql_where = " AND ".join(where)
-        page = max(1, page)
-        with db.connect(paths.db) as conn:
-            total = conn.execute(f"SELECT COUNT(*) FROM jobs j LEFT JOIN matches m ON m.job_id = j.id WHERE {sql_where}",
-                                 params).fetchone()[0]
-            rows = conn.execute(
-                f"""SELECT j.id, j.title, j.company, j.location, j.remote, j.role_type, j.status, j.date_posted, j.ats,
-                           j.description != '' AS described, m.score, m.confidence, m.reason, m.tags
-                    FROM jobs j LEFT JOIN matches m ON m.job_id = j.id WHERE {sql_where}
-                    ORDER BY {order} LIMIT ? OFFSET ?""", (*params, PAGE_SIZE, (page - 1) * PAGE_SIZE)).fetchall()
-            types = [r[0] for r in conn.execute("SELECT DISTINCT role_type FROM jobs WHERE role_type != '' ORDER BY 1")]
-        filters = {"status": status, "q": q, "field": field, "type": type, "min_score": min_score,
-                   "described": described, "sort": sort}
-        pages = max(1, math.ceil(total / PAGE_SIZE))
+             described: str = "", region: str = "", area: str = "", sort: str = "score", page: int = 1):
+        f = {"status": status, "q": q, "field": field, "type": type, "min_score": min_score, "described": described,
+             "region": region, "area": area, "sort": sort if sort in SORTS else "score"}
+        return list_page(request, "jobs.html", "/jobs", f, page=page)
 
-        def page_url(n: int) -> str:
-            return "/jobs?" + urlencode({**{k: v for k, v in filters.items() if v}, "page": n})
-
-        return render(request, "jobs.html", rows=rows, total=total, page=page, pages=pages, page_url=page_url,
-                      filters=filters, types=types,
-                      fields=["software", "data", "product", "hardware", "quant", "security", "design"])
+    @app.get("/qualify", response_class=HTMLResponse)
+    def qualify_page(request: Request, show: str = "qualify", q: str = "", field: str = "", type: str = "",
+                     region: str = "", area: str = "", sort: str = "score", page: int = 1):
+        show = show if show in ("qualify", "close") else "qualify"
+        f = {"show": show, "q": q, "field": field, "type": type, "region": region, "area": area,
+             "sort": sort if sort in SORTS else "score"}
+        # `show` is one of two fixed words (checked above), so it's safe in the SQL text.
+        # Only jobs you could still apply to: not already approved, filled, submitted, rejected or closed.
+        extra = f"q.status = '{show}' AND j.status IN ('found', 'matched', 'ready_to_fill', 'needs_human')"
+        return list_page(request, "qualify.html", "/qualify", f, extra_where=extra, page=page)
 
     # ------------------------------------------------------------ review page
 
@@ -190,7 +256,11 @@ def create_app(paths: Paths) -> FastAPI:
         run = conn.execute("SELECT * FROM autofill_runs WHERE job_id = ? ORDER BY id DESC LIMIT 1", (job_id,)).fetchone()
         run_steps = json.loads(run["report_json"]) if run else []
         tailored = tailor.load(conn, job_id)
-        return dict(tailored=tailored, tailor_moves=tailor.moves(tailored), job=job, match=match, skills=grouped, app=app_, events=events, sources=sources,
+        from jobpilot.matching import minimums
+
+        refresh_indexes(conn, profile)
+        job_areas = [r["area"] for r in conn.execute("SELECT area FROM job_places WHERE job_id = ?", (job_id,))]
+        return dict(qual=minimums.load(conn, job_id), job_areas=job_areas,tailored=tailored, tailor_moves=tailor.moves(tailored), job=job, match=match, skills=grouped, app=app_, events=events, sources=sources,
                     resumes=resumes, next_id=nxt, editable=job["status"] in (*PRE_APPROVAL, "approved", "filled"),
                     form=form_row, can_load_form=job["ats"] in FORM_ATS, run=run, run_steps=run_steps)
 

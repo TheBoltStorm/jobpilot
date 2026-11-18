@@ -111,7 +111,9 @@ The dashboard has:
   - DRAFT written answers and private notes;
   - **Approve**, **Save edits**, **Skip** and **Reject** buttons;
   - **Tailored resume**: a version of your resume reordered for this job (see below).
-- **Jobs.** Filter by status, field, type, score or search text.
+- **Jobs.** Filter by region and area, status, field, type, score or search text.
+- **You qualify.** Open jobs where you meet every minimum requirement found in the posting, plus a
+  tab for jobs you're one requirement short of (see below).
 - **Skill gaps.** The gap report, exportable to Markdown or CSV.
 - **Run log.** Every discovery and scoring run, with Claude costs.
 - **Settings.** Sources, filters, the scoring engine and rate limits.
@@ -128,6 +130,31 @@ How the gate works:
 
 The dashboard only answers on 127.0.0.1. Every button needs a token that's created when it starts,
 and requests from other websites are refused, so a page you visit can't press Approve for you.
+
+## Where jobs are, and which ones you qualify for
+
+Every job's location is sorted into a **region** (Remote, US Northeast / Midwest / South / West, Canada,
+Europe, Asia-Pacific, Latin America) and an **area**: a metro area for the big job markets
+("SF Bay Area", "New York City area", "Seattle area"...), otherwise the city. A posting listing several
+cities appears under each. On the Jobs and You qualify pages, click a region chip or pick an area.
+
+```bash
+jobpilot places                       # open jobs by region and area
+jobpilot jobs list --area "Bay Area"  # or --region "US West", "Remote", "Europe"
+```
+
+**You qualify** checks each posting's *required* section against your profile: required skills,
+degree level, years of experience, graduation date and GPA. A job is listed when every requirement
+JobPilot found is met, and at least two were found. Coursework counts as having a skill, but a
+related skill (Java for Kotlin) doesn't. Jobs without a description, or with nothing specific to check,
+aren't listed. Work authorization, sponsorship and clearance are never judged for you: if a posting
+mentions them, the job's page shows a note.
+
+```bash
+jobpilot qualify                      # meet every minimum
+jobpilot qualify --close              # one requirement short, and which one
+jobpilot qualify --region "US West"
+```
 
 ## Tailored resumes
 
@@ -167,7 +194,7 @@ Details: [docs/AUTOFILL.md](docs/AUTOFILL.md).
 | `jobpilot sources` | List sources, whether each is on, and why it's allowed. |
 | `jobpilot discover [--source NAME]` | Fetch new jobs (all enabled sources, or just one). |
 | `jobpilot import-csv FILE [--name handshake] [--no-filter]` | Import a CSV you exported. |
-| `jobpilot jobs list [--type internship] [--ats greenhouse] [--search text] [--summary]` | Browse stored jobs. |
+| `jobpilot jobs list [--type internship] [--ats greenhouse] [--search text] [--region R] [--area A] [--summary]` | Browse stored jobs. |
 | `jobpilot jobs show ID` | Full details, sources and description for one job. |
 | `jobpilot enrich [--limit N] [--retry-failed]` | Fetch missing descriptions through public ATS APIs. |
 | `jobpilot match [--engine local\|claude] [--rescore] [--limit N]` | Score new or changed jobs. |
@@ -179,6 +206,8 @@ Details: [docs/AUTOFILL.md](docs/AUTOFILL.md).
 | `jobpilot dashboard [--port 8765] [--no-browser]` | Open the local review dashboard. |
 | `jobpilot forms fetch [ID] [--limit N] [--all]` / `forms show ID` | Load (or show) a posting's real application questions. |
 | `jobpilot autofill ID [--fill] [--headless] [--browser msedge\|chrome]` | Dry run (default) or fill an approved application. Never submits. |
+| `jobpilot places [--region R] [--top N]` | Open jobs by region and area. |
+| `jobpilot qualify [--close] [--region R] [--area A]` | Jobs where you meet every minimum requirement (or are one short). |
 | `jobpilot tailor ID [--approve\|--discard]` | Suggest a resume reordered for one job; approve to create the DOCX. |
 | `jobpilot run [--skip-discover] [--enrich-limit N] [--forms-limit N]` | The daily pipeline: discover, enrich, match, prepare, load forms. Fills nothing. |
 | `jobpilot doctor [--no-browser]` | Check your setup and say how to fix anything missing. |
@@ -218,9 +247,11 @@ jobpilot/
   core/db.py             SQLite + migrations
   core/http.py           polite HTTP (robots.txt, rate limit, retries)
   core/protected.py      protected-question classifier
+  core/places.py         locations -> regions and metro areas
   sources/               one module per source + base.py, dedupe.py, companies seed list
   enrich.py              fetch missing descriptions via public ATS APIs
-  matching/              skills.yaml list, local scorer, optional Claude engine, gap report
+  matching/              skills.yaml list, local scorer, optional Claude engine, gap report,
+                         minimum-requirements check (minimums.py)
   review/                statuses + the human gate, application plans, applications log export
                          + field mapper (mapping.py), fact-only drafts (drafts.py),
                          tailored resume versions (tailor.py)

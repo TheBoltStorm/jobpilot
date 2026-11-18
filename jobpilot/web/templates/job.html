@@ -5,15 +5,16 @@
 <div class="job-head">
   <div>
     <h1>{{ job.title }}</h1>
-    <p class="meta">{{ job.company }} · {{ job.location or 'location unknown' }}{% if job.remote %} · {{ job.remote }}{% endif %}
-      {% if job.role_type %} · {{ job.role_type }}{% endif %}{% if job.date_posted %} · posted {{ job.date_posted }}{% endif %}</p>
-    <p class="meta"><a href="{{ job.url }}" target="_blank" rel="noopener noreferrer">Open posting ↗</a>
-      {% if job.apply_url and job.apply_url != job.url %} · <a href="{{ job.apply_url }}" target="_blank" rel="noopener noreferrer">Apply page ↗</a>{% endif %}
-      · {{ job.ats or 'unknown site' }} · job #{{ job.id }}</p>
+    <p class="meta"><b>{{ job.company }}</b> · <span title="{{ job.location }}">{{ job_areas|join(' · ') if job_areas else (job.location or 'location unknown') }}</span>
+      {% if job.role_type %} · {{ job.role_type }}{% endif %}{% if job.date_posted %} · posted {{ job.date_posted }}{% endif %}
+      · <a href="{{ job.url }}" target="_blank" rel="noopener noreferrer">posting ↗</a>
+      {% if job.apply_url and job.apply_url != job.url %} · <a href="{{ job.apply_url }}" target="_blank" rel="noopener noreferrer">apply page ↗</a>{% endif %}
+      <span class="muted">· {{ job.ats or 'unknown site' }} #{{ job.id }}</span></p>
   </div>
   <div class="head-right">
+    {% if match %}<span class="score big sc-{{ match.score // 25 }}" title="Match score">{{ match.score }}</span>{% endif %}
     <span class="pill big s-{{ st }}">{{ st|label }}</span>
-    {% if next_id %}<a class="small" href="/jobs/{{ next_id }}">Next in queue →</a>{% endif %}
+    {% if next_id %}<a class="btn small-btn" href="/jobs/{{ next_id }}">Next →</a>{% endif %}
   </div>
 </div>
 
@@ -39,9 +40,8 @@
         <span>Showing the standard fields. JobPilot can't read {{ job.ats or 'this site' }}'s forms yet, so you'll apply on the site.</span>
       {% endif %}
     </div>
-    <p class="muted small">Everything autofill would put in the form. Values come only from your profile, your resume
-      versions, or what you type here. <b>Only you can answer</b> questions are never filled from your profile; your
-      answers to them stay on this one application. Legally binding or consent questions are always left for you to tick.</p>
+    <p class="muted small" title="Only-you questions are never filled from your profile; your answers stay on this one application. Legally binding or consent questions are always left for you to tick.">
+      What autofill would type. Values come only from your profile, your resumes, or you.</p>
     <label class="resume-pick">Resume version
       <select name="resume" {% if not editable %}disabled{% endif %}>
         {% for r in resumes %}<option value="{{ r.label }}" {% if r.label == app.resume_label %}selected{% endif %}>{{ r.label }}{% if r.is_default %} (default){% endif %}</option>{% endfor %}
@@ -49,7 +49,7 @@
       </select>
       {% if not resumes %}<span class="warn-text small">Add one with <code>jobpilot resume add FILE</code></span>{% endif %}</label>
     <table class="fields">
-      <thead><tr><th>Question</th><th>Answer</th><th>Where it came from</th></tr></thead>
+      <thead><tr><th>Question</th><th>Answer</th><th>Source</th></tr></thead>
       <tbody>
       {% set ns = namespace(section='') %}
       {% for f in app.fields if not (f.maps_to == 'resume' or f.key == 'resume') %}
@@ -64,7 +64,7 @@
         <tr class="f-{{ 'optional' if blank_ok else f.state }}{% if f.protected %} protected{% endif %}">
           <th scope="row"><label for="{{ fid }}">{{ f.label }}</label>
             {% if f.protected %}<div class="tag prot" title="Never filled from your profile">only you can answer</div>{% endif %}
-            {% if f.optional %}<div class="muted small">optional</div>{% elif f.field_id %}<div class="muted small">required</div>{% endif %}</th>
+            {% if f.optional %} <span class="muted small">(optional)</span>{% endif %}</th>
           <td>
             {% if f.kind in ('select', 'radio') and f.options %}
               <select id="{{ fid }}" name="fv_{{ f.key }}" {{ dis }}>
@@ -88,20 +88,19 @@
             {% endif %}
           </td>
           <td class="small">
-            {% if blank_ok and not f.protected %}<span class="state op">Optional</span>
-            {% elif f.state == 'needs_human' %}<span class="state nh">NEEDS_HUMAN</span>
-            {% elif f.state == 'human' %}<span class="state hu">You</span>
-            {% elif f.state == 'draft' %}<span class="state dr">DRAFT</span>
-            {% else %}<span class="state fi">Profile</span>{% endif %}
-            <span class="muted">{{ f.source }}</span></td>
+            {% if blank_ok and not f.protected %}<span class="state op" title="{{ f.source }}">Optional</span>
+            {% elif f.state == 'needs_human' %}<span class="state nh" title="{{ f.source }}">NEEDS_HUMAN</span>
+            {% elif f.state == 'human' %}<span class="state hu" title="{{ f.source }}">You</span>
+            {% elif f.state == 'draft' %}<span class="state dr" title="{{ f.source }}">DRAFT</span>
+            {% else %}<span class="state fi" title="{{ f.source }}">Profile</span>{% endif %}
+            {% if f.state == 'draft' %}<span class="src">{{ f.source }}</span>{% endif %}</td>
         </tr>
       {% endfor %}
       </tbody>
     </table>
 
     <h3>Extra answers</h3>
-    <p class="muted small">Answers you want to keep with this application (e.g. for a question on a custom site).
-      Drafts for the form's own open questions are in the table above, marked DRAFT.</p>
+    <p class="muted small">Answers to keep with this application, e.g. for a custom site's questions.</p>
     <input type="hidden" name="draft_count" value="{{ app.drafts|length }}">
     {% for d in app.drafts %}
       <div class="draft-box">
@@ -169,24 +168,38 @@
 </form>
 
 <aside>
+  {% if qual %}
+  <section class="card" id="requirements">
+    <div class="card-head"><h2>Minimum requirements</h2>
+      {% if qual.status == 'qualify' %}<span class="tag q-qualify">you meet them all</span>
+      {% elif qual.status == 'close' %}<span class="tag q-close">one short</span>
+      {% elif qual.status == 'not' %}<span class="tag">{{ qual.checks|selectattr('ok', 'false')|list|length }} not met</span>
+      {% else %}<span class="tag">can't check</span>{% endif %}</div>
+    {% if qual.checks %}
+    <ul class="checklist">
+      {% for c in (qual.checks|selectattr('ok', 'false')|list) + (qual.checks|selectattr('ok', 'none')|list) + (qual.checks|selectattr('ok', 'true')|list) %}
+      <li class="{{ 'y' if c.ok else ('n' if c.ok is false else 'u') }}"><span class="mk">{{ '✓' if c.ok else ('✗' if c.ok is false else '?') }}</span>
+        <span><b>{{ c.what }}</b> <span class="muted">{{ c.detail }}</span></span></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% for n in qual.notes %}<p class="small muted">{{ n }}</p>{% endfor %}
+  </section>
+  {% endif %}
+
   <section class="card">
-    <div class="card-head"><h2>Match</h2>
-      {% if match %}<span class="score big sc-{{ match.score // 25 }}">{{ match.score }}</span>{% endif %}</div>
+    <div class="card-head"><h2>Match</h2>{% if match %}<span class="muted small">{{ match.confidence }} confidence · {{ match.engine }}</span>{% endif %}</div>
     {% if match %}
-      <p>{{ match.reason }}</p>
-      <p class="muted small">{{ match.confidence }} confidence · {{ match.engine }} engine · scored {{ match.scored_at|day }}</p>
-      {% for status, title in (('missing', 'Skill gaps'), ('partial', 'You partly have'), ('have', 'You have')) %}
+      <p class="small">{{ match.reason }}</p>
+      {% for status, title in (('missing', 'Missing'), ('partial', 'Partly'), ('have', 'You have')) %}
         {% if skills[status] %}
         <h3>{{ title }}</h3>
-        <ul class="skills s-{{ status }}">
-          {% for s in skills[status] %}
-          <li><b>{{ s.name }}</b> <span class="tag imp-{{ s.importance }}">{{ s.importance }}</span>
-            {% if s.evidence %}<div class="ev small">↳ {{ s.evidence }}</div>{% endif %}
-            {% if s.job_snippet %}<div class="snip small muted">“{{ s.job_snippet }}”</div>{% endif %}</li>
-          {% endfor %}
-        </ul>
+        <div class="skill-chips s-{{ status }}">
+          {% for s in skills[status] %}<span title="{{ s.importance }}{% if s.evidence %}: {{ s.evidence }}{% endif %}{% if s.job_snippet %} | posting: {{ s.job_snippet }}{% endif %}">{{ s.name }}{% if s.importance == 'required' %} *{% endif %}</span>{% endfor %}
+        </div>
         {% endif %}
       {% endfor %}
+      <p class="muted small">* required. Hover a skill for the evidence.</p>
     {% else %}
       <p class="muted">Not scored yet. Run <code>jobpilot match</code>.</p>
     {% endif %}
@@ -234,10 +247,11 @@
       <p><b>Last {{ 'dry run' if run.mode == 'dry_run' else 'fill' }}</b> {{ run.started_at|day }}:
         {{ run.outcome|replace('_', ' ') }}.</p>
       {% if run_steps %}
+      <details><summary class="small">{{ run_steps|length }} fields</summary>
       <ul class="steps small">
         {% for st in run_steps %}<li class="a-{{ st.action }}"><b>{{ st.action|replace('_', ' ') }}</b> · {{ st.label }}
           {% if st.value and st.action in ('would_fill', 'filled') %}<span class="muted">→ {{ st.value[:60] }}</span>{% elif st.note %}<span class="muted">({{ st.note }})</span>{% endif %}</li>{% endfor %}
-      </ul>
+      </ul></details>
       {% endif %}
     {% else %}<p class="muted">Not run yet.</p>{% endif %}
     <p class="small">Dry run (types nothing): <code>jobpilot autofill {{ job.id }}</code></p>
@@ -247,18 +261,18 @@
   </section>
   {% endif %}
 
-  <section class="card">
-    <h2>Description</h2>
+  <details class="card">
+    <summary>Description</summary>
     {% if job.description %}
       <div class="desc">{{ job.description }}</div>
     {% else %}
       <p class="muted">No description from this source yet. <code>jobpilot enrich</code> fetches it for Greenhouse,
         Lever and Ashby postings; otherwise <a href="{{ job.url }}" target="_blank" rel="noopener noreferrer">read it on the site</a>.</p>
     {% endif %}
-  </section>
+  </details>
 
-  <section class="card">
-    <h2>History</h2>
+  <details class="card">
+    <summary>History</summary>
     <ul class="events">
       {% for e in events %}
         <li><span class="muted small">{{ e.at|day }}</span> <span class="who-{{ e.actor }}">{{ 'You' if e.actor == 'user' else 'JobPilot' }}</span>
@@ -268,7 +282,7 @@
       <li><span class="muted small">{{ job.date_found|day }}</span> Found via
         {% for s in sources %}{{ s.source }}{% if not s.active %} (gone){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</li>
     </ul>
-  </section>
+  </details>
 </aside>
 </div>
 {% endblock %}

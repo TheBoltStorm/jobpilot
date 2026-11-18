@@ -13,10 +13,11 @@
   <nav>
     {% set here = request.url.path %}
     <a href="/" {% if here == '/' %}aria-current="page"{% endif %}>Board</a>
-    <a href="/review" {% if here.startswith('/jobs/') %}aria-current="page"{% endif %}>Review queue</a>
+    <a href="/review" {% if here.startswith('/jobs/') %}aria-current="page"{% endif %}>Review</a>
     <a href="/jobs" {% if here == '/jobs' %}aria-current="page"{% endif %}>Jobs</a>
+    <a href="/qualify" {% if here == '/qualify' %}aria-current="page"{% endif %}>You qualify</a>
     <a href="/gaps" {% if here == '/gaps' %}aria-current="page"{% endif %}>Skill gaps</a>
-    <a href="/runs" {% if here == '/runs' %}aria-current="page"{% endif %}>Run log</a>
+    <a href="/runs" {% if here == '/runs' %}aria-current="page"{% endif %}>Runs</a>
     <a href="/settings" {% if here == '/settings' %}aria-current="page"{% endif %}>Settings</a>
   </nav>
 </header>
@@ -26,6 +27,6 @@
   {% if error %}<div class="banner err" role="alert">{{ error }}</div>{% endif %}
   {% block content %}{% endblock %}
 </main>
-<footer class="gate">JobPilot never submits an application. It fills forms only after you approve, then stops so you click Submit yourself.</footer>
+<footer class="gate">JobPilot never submits. It fills only what you approve, then you click Submit.</footer>
 </body>
 </html>

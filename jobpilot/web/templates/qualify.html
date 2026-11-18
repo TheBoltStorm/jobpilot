@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}You qualify{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>You qualify</h1>
+  <span class="sub">Open jobs where you meet every minimum requirement JobPilot found in the posting.</span>
+</div>
+
+<ul class="chips">
+  <li><a class="chip ok" href="/qualify?show=qualify" {% if filters.show == 'qualify' %}aria-current="true"{% endif %}>
+    Meet all minimums <b>{{ qual_counts.get('qualify', 0) }}</b></a></li>
+  <li><a class="chip" href="/qualify?show=close" {% if filters.show == 'close' %}aria-current="true"{% endif %}>
+    One requirement short <b>{{ qual_counts.get('close', 0) }}</b></a></li>
+  <li class="muted small" style="align-self:center">{{ qual_counts.get('unknown', 0) }} can't be checked yet (no description or no specific requirements)</li>
+</ul>
+
+{{ m.region_chips('/qualify', filters, facets) }}
+{{ m.filter_bar('/qualify', filters, facets, fields, types) }}
+
+<p class="muted small" title="A related skill (Java for Kotlin) doesn't count. Work authorization, sponsorship and clearance are never judged for you; they show as notes on the job's page.">
+  {{ total }} jobs{% if filters.area %} in {{ filters.area }}{% elif filters.region %} in {{ filters.region }}{% endif %}
+  · checks required skills, degree, years of experience, graduation date and GPA against your profile.</p>
+
+{{ m.job_rows(rows, areas, checks, filters.show) }}
+{{ m.pager(page, pages, page_url) }}
+{% endblock %}

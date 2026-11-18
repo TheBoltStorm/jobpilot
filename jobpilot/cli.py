@@ -232,6 +232,13 @@ def cmd_jobs(args) -> int:
         if args.search:
             where.append("(title LIKE ? OR company LIKE ?)")
             params += [f"%{args.search}%"] * 2
+        if args.region or args.area:
+            from jobpilot.core import places
+
+            places.refresh(conn)
+            psql, pparams = places.sql_filter(args.region or "", "", args.area or "")
+            where.append(psql.replace("p.job_id = j.id", "p.job_id = jobs.id"))
+            params += pparams
         sql = f"SELECT * FROM jobs WHERE {' AND '.join(where)} ORDER BY date_posted DESC, id DESC LIMIT ?"
         rows = conn.execute(sql, (*params, args.limit)).fetchall()
         count = conn.execute(f"SELECT COUNT(*) FROM jobs WHERE {' AND '.join(where)}", params).fetchone()[0]
@@ -603,6 +610,58 @@ def cmd_doctor(args) -> int:
     return doctor(get_paths(args.home), check_browser=not args.no_browser)
 
 
+def cmd_places(args) -> int:
+    from jobpilot.core import places
+
+    paths = get_paths(args.home)
+    with db.connect(paths.db) as conn:
+        places.refresh(conn)
+        for region, n, areas in places.facets(conn):
+            if args.region and args.region.lower() not in region.lower():
+                continue
+            print(f"{region}  ({n} open jobs)")
+            for area, c in areas[: args.top]:
+                print(f"  {c:>5}  {area}")
+            if len(areas) > args.top:
+                print(f"         ... {len(areas) - args.top} more areas")
+    print("\nFilter with `jobpilot jobs list --area \"SF Bay Area\"` or `--region \"US West\"`, "
+          "or in the dashboard's Jobs and You qualify pages.")
+    return 0
+
+
+def cmd_qualify(args) -> int:
+    from jobpilot.core import places
+    from jobpilot.matching import minimums
+
+    paths = get_paths(args.home)
+    profile = _profile_or_exit(paths)
+    want = "close" if args.close else "qualify"
+    with db.connect(paths.db) as conn:
+        places.refresh(conn)
+        minimums.refresh(conn, profile)
+        where = ["q.status = ?", "j.status IN ('found', 'matched', 'ready_to_fill', 'needs_human')"]
+        params: list = [want]
+        if args.region or args.area:
+            psql, pparams = places.sql_filter(args.region or "", "", args.area or "")
+            where.append(psql)
+            params += pparams
+        rows = conn.execute(
+            f"""SELECT j.id, j.title, j.company, m.score, q.detail_json,
+                       (SELECT GROUP_CONCAT(area, ' / ') FROM job_places p WHERE p.job_id = j.id) areas
+                FROM qualifications q JOIN jobs j ON j.id = q.job_id LEFT JOIN matches m ON m.job_id = j.id
+                WHERE {' AND '.join(where)} ORDER BY m.score DESC LIMIT ?""", (*params, args.limit)).fetchall()
+    print("Open jobs where you meet every minimum requirement found in the posting:" if want == "qualify"
+          else "Open jobs where you're one requirement short:")
+    for r in rows:
+        line = f"{r['id']:>6}  {r['score'] or '-':>3}  {r['company'][:20]:<20}  {r['title'][:44]:<44}  {(r['areas'] or '')[:28]}"
+        if want == "close":
+            miss = [c["what"] for c in json.loads(r["detail_json"])["checks"] if c["ok"] is False]
+            line += f"  (missing: {', '.join(miss)})"
+        print(line)
+    print(f"\n{len(rows)} shown. `jobpilot match show ID` for the details, or open the dashboard.")
+    return 0
+
+
 def cmd_export(args) -> int:
     from jobpilot.review import export
 
@@ -679,6 +738,8 @@ def build_parser() -> argparse.ArgumentParser:
     jl.add_argument("--type", help="internship | co-op | part-time | full-time")
     jl.add_argument("--ats", help="greenhouse | lever | ashby | workday | other ...")
     jl.add_argument("--search", help="text in title or company")
+    jl.add_argument("--region", help="e.g. 'US West', 'Remote', 'Europe' (see `jobpilot places`)")
+    jl.add_argument("--area", help="area or city text, e.g. 'SF Bay Area', 'Austin', 'London'")
     jl.add_argument("--limit", type=int, default=25)
     jl.add_argument("--all", action="store_true", help="include closed postings")
     jl.add_argument("--summary", action="store_true", help="also print counts by status and ATS")
@@ -757,6 +818,18 @@ def build_parser() -> argparse.ArgumentParser:
     dr = sub.add_parser("doctor", help="check your setup: profile, resume, privacy, settings, browser")
     dr.add_argument("--no-browser", action="store_true", help="skip starting the autofill browser")
     dr.set_defaults(func=cmd_doctor)
+
+    pl = sub.add_parser("places", help="open jobs by region and area")
+    pl.add_argument("--region", help="only this region")
+    pl.add_argument("--top", type=int, default=10, help="areas per region")
+    pl.set_defaults(func=cmd_places)
+
+    qu = sub.add_parser("qualify", help="open jobs where you meet every minimum requirement")
+    qu.add_argument("--close", action="store_true", help="show jobs one requirement short instead")
+    qu.add_argument("--region")
+    qu.add_argument("--area")
+    qu.add_argument("--limit", type=int, default=30)
+    qu.set_defaults(func=cmd_qualify)
 
     tl = sub.add_parser("tailor", help="suggest a resume version reordered for one job (you approve the diff)")
     tl.add_argument("id", type=int)
