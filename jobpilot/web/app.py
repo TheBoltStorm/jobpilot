@@ -23,6 +23,7 @@ from pydantic import ValidationError
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from jobpilot.config import Paths
+from jobpilot.forms import FORM_ATS
 from jobpilot.core import db
 from jobpilot.onboarding.profile import load_profile
 from jobpilot.review import export, plan
@@ -43,6 +44,7 @@ MESSAGES = {
     "prepared": "Prepared every matched job.",
     "settings": "Settings saved. They apply to the next discover / match run.",
     "queue_empty": "Nothing left to review. Run discover and match for more.",
+    "form_loaded": "Loaded the real form's questions. Check the answers below.",
 }
 
 
@@ -180,8 +182,26 @@ def create_app(paths: Paths) -> FastAPI:
         sources = conn.execute("SELECT source, scope, active, url FROM job_sources WHERE job_id = ?", (job_id,)).fetchall()
         resumes = db.list_resumes(conn)
         nxt = next((r["id"] for r in plan.queue(conn, 2) if r["id"] != job_id), None)
+        form_row = conn.execute("SELECT form_url, fetched_at FROM forms WHERE job_id = ?", (job_id,)).fetchone()
+        run = conn.execute("SELECT * FROM autofill_runs WHERE job_id = ? ORDER BY id DESC LIMIT 1", (job_id,)).fetchone()
+        run_steps = json.loads(run["report_json"]) if run else []
         return dict(job=job, match=match, skills=grouped, app=app_, events=events, sources=sources,
-                    resumes=resumes, next_id=nxt, editable=job["status"] in (*PRE_APPROVAL, "approved", "filled"))
+                    resumes=resumes, next_id=nxt, editable=job["status"] in (*PRE_APPROVAL, "approved", "filled"),
+                    form=form_row, can_load_form=job["ats"] in FORM_ATS, run=run, run_steps=run_steps)
+
+    def load_form_for(conn, job_id: int, profile) -> None:
+        from jobpilot.core.http import PoliteClient
+        from jobpilot.sources.companies import load_companies
+        from jobpilot.sources.dedupe import company_key
+
+        s = settings()
+        companies = load_companies(paths.companies)
+        tokens = {company_key(c.name): c.token for c in companies if c.ats == "greenhouse"}
+        http = PoliteClient(s.user_agent, s.min_seconds_between_requests, s.request_timeout_seconds)
+        try:
+            plan.load_real_form(conn, job_id, profile, http, tokens)
+        finally:
+            http.close()
 
     @app.get("/jobs/{job_id}", response_class=HTMLResponse)
     def job_page(request: Request, job_id: int):
@@ -223,7 +243,13 @@ def create_app(paths: Paths) -> FastAPI:
                 # Your edits are saved first (and kept) even if the action below is refused.
                 if action in ("save", "approve", "reject", "skip") and job["status"] in (
                         *PRE_APPROVAL, "approved", "filled"):
-                    values = {k[3:]: str(v) for k, v in form.multi_items() if k.startswith("fv_")}
+                    grouped_vals: dict[str, list[str]] = {}
+                    for k, v in form.multi_items():
+                        if k.startswith("fv_"):
+                            grouped_vals.setdefault(k[3:], []).append(str(v))
+                    # Checkbox groups send one value per ticked box (plus an empty marker).
+                    values = {k: "; ".join(x for x in vs if x.strip()) if len(vs) > 1 else vs[0]
+                              for k, vs in grouped_vals.items()}
                     with conn:
                         plan.save_answers(conn, job_id, profile, values, drafts_from(form), str(form.get("notes", "")),
                                           str(form.get("resume", "")) or None)
@@ -232,6 +258,9 @@ def create_app(paths: Paths) -> FastAPI:
                         conn.execute("UPDATE applications SET notes = ? WHERE job_id = ?",
                                      (str(form.get("notes", "")), job_id))
                 with conn:
+                    if action == "load_form":
+                        load_form_for(conn, job_id, profile)
+                        return go(f"/jobs/{job_id}", "form_loaded")
                     if action == "approve":
                         if form.get("confirm") != "yes":
                             raise GateError("Tick the box to confirm you've checked every field and draft first.")

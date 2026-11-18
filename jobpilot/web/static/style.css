@@ -167,3 +167,19 @@ tr.protected th { color: var(--prot); }
   table.fields th, table.fields td { border: 0; padding: 2px 0; }
 }
 .state.op { color: var(--muted); background: var(--bg); border: 1px solid var(--line); }
+
+.state.dr { color: var(--draft); background: var(--warn-bg); }
+tr.f-draft textarea { border-color: var(--draft); }
+.form-source { padding: 8px 10px; border-radius: 6px; background: var(--bg); border: 1px solid var(--line); margin: 6px 0 10px;
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: space-between; }
+.form-source.real { border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); }
+.small-btn { padding: 3px 10px; font-size: .85rem; }
+fieldset.checks { border: 0; padding: 0; margin: 0; }
+fieldset.checks label.check { margin: 2px 0; }
+table.fields select { width: 100%; }
+tr.section-row td { background: var(--bg); }
+ul.steps { list-style: none; padding: 0; margin: 0 0 8px; max-height: 320px; overflow: auto; }
+ul.steps li { padding: 3px 0; border-bottom: 1px solid var(--line); }
+ul.steps .a-would_fill b, ul.steps .a-filled b { color: var(--ok); }
+ul.steps .a-left_for_you b { color: var(--warn); }
+ul.steps .a-failed b, ul.steps .a-not_found b { color: var(--err); }

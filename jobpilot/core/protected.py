@@ -11,12 +11,13 @@ from __future__ import annotations
 import re
 
 PROTECTED_CATEGORIES: dict[str, list[str]] = {
+    # Checked in order: "visa sponsorship" is a sponsorship question even though it mentions a visa.
+    "sponsorship": [r"sponsor"],
     "work_authorization": [
         r"work(ing)?\s*auth", r"authori[sz]ed\s+to\s+work", r"legally\s+(eligible|able|permitted)",
         r"eligib\w*\s+to\s+work", r"right\s+to\s+work", r"citizen", r"visa", r"\bopt\b", r"\bcpt\b",
         r"green\s*card", r"permanent\s+resident", r"immigration",
     ],
-    "sponsorship": [r"sponsor"],
     "eeo_demographic": [
         r"\bgender\b", r"\bsex\b", r"\brace\b", r"ethnic", r"hispanic", r"latin[oax]", r"sexual\s+orientation",
         r"transgender", r"pronoun", r"\beeo", r"equal\s+(employment\s+)?opportunity", r"demographic",

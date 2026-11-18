@@ -442,6 +442,100 @@ def cmd_runs(args) -> int:
     return 0
 
 
+def _gh_tokens(companies) -> dict[str, str]:
+    from jobpilot.sources.dedupe import company_key
+
+    return {company_key(c.name): c.token for c in companies if c.ats == "greenhouse"}
+
+
+def _llm_map(settings):
+    """The optional Claude label mapper, only when you've chosen the Claude engine and have a key."""
+    import os
+
+    if settings.matching.engine != "claude" or not os.environ.get("ANTHROPIC_API_KEY"):
+        return None
+    try:
+        import anthropic  # noqa: F401
+    except ImportError:
+        return None
+    from jobpilot.review.mapping import claude_mapper
+
+    return claude_mapper(settings.matching.claude_model)
+
+
+def cmd_forms(args) -> int:
+    from jobpilot.forms import fetch_forms, load_form
+    from jobpilot.review import plan
+    from jobpilot.review.status import GateError
+
+    paths, settings, profile, companies = _discovery_context(args)
+    if args.action == "show":
+        with db.connect(paths.db) as conn:
+            form = load_form(conn, args.id)
+        if not form:
+            print(f"No form stored for job {args.id}. Run `jobpilot forms fetch {args.id}`.", file=sys.stderr)
+            return 1
+        print(form[0])
+        for q in form[1]:
+            req = "*" if q.required else " "
+            opts = f"  [{' | '.join(q.options[:5])}{' ...' if len(q.options) > 5 else ''}]" if q.options else ""
+            print(f" {req} {q.section:<11} {q.kind:<13} {q.label[:70]}{opts}")
+        return 0
+    if profile is None:
+        print("No profile yet. Run `jobpilot onboard` first.", file=sys.stderr)
+        return 1
+    http, _ = _make_sources(settings, profile, companies, only=["none"])
+    llm = _llm_map(settings)
+    try:
+        with db.connect(paths.db) as conn:
+            if args.id:
+                try:
+                    with conn:
+                        app = plan.load_real_form(conn, args.id, profile, http, _gh_tokens(companies), llm)
+                except GateError as exc:
+                    print(exc, file=sys.stderr)
+                    return 1
+                left = len(app.unanswered)
+                print(f"Loaded {len([f for f in app.fields if f.field_id])} questions for job {args.id}. "
+                      f"{left} need you. Review them with `jobpilot dashboard`.")
+                return 0
+            statuses = ("ready_to_fill", "needs_human") if not args.all else (
+                "matched", "ready_to_fill", "needs_human", "found")
+            print(f"Loading real form questions for up to {args.limit} Greenhouse jobs (rate-limited)...")
+            ok, failed = fetch_forms(conn, http, _gh_tokens(companies), statuses, args.limit, llm_map=llm,
+                                     profile=profile)
+            ids = [r[0] for r in conn.execute("SELECT job_id FROM forms")]
+            with conn:
+                for job_id in ids:
+                    plan.prepare(conn, job_id, profile)
+    finally:
+        http.close()
+    print(f"Loaded {ok} forms, {failed} failed. For a job you already approved, load its form on its own "
+          "(`jobpilot forms fetch ID`); that withdraws the approval so you can check the real questions.")
+    return 0
+
+
+def cmd_autofill(args) -> int:
+    from jobpilot.autofill import run_autofill
+    from jobpilot.review.status import GateError
+    from jobpilot.settings import load_settings
+
+    paths = get_paths(args.home)
+    settings = load_settings(paths.settings)
+    mode = "fill" if args.fill else "dry_run"
+    try:
+        from jobpilot.onboarding.profile import load_profile
+
+        result = run_autofill(paths, args.id, mode, profile=load_profile(paths.profile),
+                              channel=args.browser or settings.autofill.browser_channel,
+                              headless=args.headless, wait_for_close=not args.no_wait,
+                              slow_mo_ms=settings.autofill.slow_mo_ms)
+    except GateError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    return 0 if result.outcome in ("dry_run_done", "stopped_before_submit") else 2
+
+
 def cmd_dashboard(args) -> int:
     from jobpilot.web.app import run
 
@@ -584,6 +678,24 @@ def build_parser() -> argparse.ArgumentParser:
     ru = sub.add_parser("runs", help="scoring run log with token costs")
     ru.add_argument("--limit", type=int, default=15)
     ru.set_defaults(func=cmd_runs)
+
+    fo = sub.add_parser("forms", help="load real application questions (Greenhouse) for review")
+    fos = fo.add_subparsers(dest="action", required=True)
+    ff = fos.add_parser("fetch", help="fetch one job's form, or forms for prepared jobs")
+    ff.add_argument("id", type=int, nargs="?")
+    ff.add_argument("--limit", type=int, default=25)
+    ff.add_argument("--all", action="store_true", help="include matched and found jobs too")
+    fsh = fos.add_parser("show")
+    fsh.add_argument("id", type=int)
+    fo.set_defaults(func=cmd_forms)
+
+    af = sub.add_parser("autofill", help="dry-run (default) or fill an approved application; never submits")
+    af.add_argument("id", type=int)
+    af.add_argument("--fill", action="store_true", help="type the approved answers (stops before Submit)")
+    af.add_argument("--browser", choices=["msedge", "chrome", "chromium"], help="default: settings.autofill")
+    af.add_argument("--headless", action="store_true", help="dry run without a visible window")
+    af.add_argument("--no-wait", action="store_true", help="close the browser when done instead of waiting")
+    af.set_defaults(func=cmd_autofill)
 
     pp = sub.add_parser("prepare", help="sort matched jobs into Ready to fill / Needs human / Custom site")
     pp.set_defaults(func=cmd_prepare)

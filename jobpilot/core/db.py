@@ -137,6 +137,27 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX application_events_job ON application_events(job_id);
     """,
+    # v5: real application-form questions (from public ATS APIs) and autofill run reports
+    """
+    CREATE TABLE forms (
+        job_id         INTEGER PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
+        ats            TEXT NOT NULL,
+        form_url       TEXT NOT NULL,          -- the page autofill opens
+        questions_json TEXT NOT NULL,
+        fetched_at     TEXT NOT NULL
+    );
+
+    CREATE TABLE autofill_runs (
+        id           INTEGER PRIMARY KEY,
+        job_id       INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+        mode         TEXT NOT NULL,            -- dry_run | fill
+        started_at   TEXT NOT NULL,
+        finished_at  TEXT,
+        outcome      TEXT NOT NULL DEFAULT '', -- stopped_before_submit | account_wall | captcha | error | ...
+        report_json  TEXT NOT NULL DEFAULT '[]'
+    );
+    CREATE INDEX autofill_runs_job ON autofill_runs(job_id);
+    """,
 ]
 
 

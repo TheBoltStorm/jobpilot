@@ -27,9 +27,21 @@
     {% if not app %}
       <p class="muted">Create your profile (<code>jobpilot onboard</code>) to see what would be filled.</p>
     {% else %}
-    <p class="muted small">This is everything autofill would type into the form. Values come only from your profile,
-      your resume versions, or what you type here. <b>Only you can answer</b> fields are never filled from your
-      profile; your answers to them stay on this one application. Phase 5 adds the real form's own questions.</p>
+    {% set real_form = app.fields|selectattr('field_id')|list|length > 0 %}
+    <div class="form-source {{ 'real' if real_form else '' }}">
+      {% if real_form %}
+        <span><b>Real form:</b> this posting's own questions{% if form %}, loaded {{ form.fetched_at|day }} from Greenhouse{% endif %}.</span>
+        {% if can_load_form and editable %}<button class="btn small-btn" name="action" value="load_form">Reload</button>{% endif %}
+      {% elif can_load_form %}
+        <span>Showing the standard fields every application asks for.</span>
+        {% if editable %}<button class="btn small-btn" name="action" value="load_form">Load this form's real questions</button>{% endif %}
+      {% else %}
+        <span>Showing the standard fields. JobPilot can't read {{ job.ats or 'this site' }}'s forms yet, so you'll apply on the site.</span>
+      {% endif %}
+    </div>
+    <p class="muted small">Everything autofill would put in the form. Values come only from your profile, your resume
+      versions, or what you type here. <b>Only you can answer</b> questions are never filled from your profile; your
+      answers to them stay on this one application. Legally binding or consent questions are always left for you to tick.</p>
     <label class="resume-pick">Resume version
       <select name="resume" {% if not editable %}disabled{% endif %}>
         {% for r in resumes %}<option value="{{ r.label }}" {% if r.label == app.resume_label %}selected{% endif %}>{{ r.label }}{% if r.is_default %} (default){% endif %}</option>{% endfor %}
@@ -37,22 +49,49 @@
       </select>
       {% if not resumes %}<span class="warn-text small">Add one with <code>jobpilot resume add FILE</code></span>{% endif %}</label>
     <table class="fields">
-      <thead><tr><th>Field</th><th>Value</th><th>Where it came from</th></tr></thead>
+      <thead><tr><th>Question</th><th>Answer</th><th>Where it came from</th></tr></thead>
       <tbody>
-      {% for f in app.fields if f.key != 'resume' %}
+      {% set ns = namespace(section='') %}
+      {% for f in app.fields if not (f.maps_to == 'resume' or f.key == 'resume') %}
+        {% if f.section in ('eeoc', 'demographic') and ns.section not in ('eeoc', 'demographic') %}
+          <tr class="section-row"><td colspan="3"><b>Voluntary self-identification</b> <span class="muted small">
+            Optional. Autofill only uses what you choose here, for this one application. Blank stays blank.</span></td></tr>
+        {% endif %}
+        {% set ns.section = f.section %}
         {% set blank_ok = f.state == 'needs_human' and f.optional %}
+        {% set fid = 'fv_' ~ loop.index %}
+        {% set dis = '' if editable else 'disabled' %}
         <tr class="f-{{ 'optional' if blank_ok else f.state }}{% if f.protected %} protected{% endif %}">
-          <th scope="row"><label for="fv_{{ loop.index }}">{{ f.label }}</label>
+          <th scope="row"><label for="{{ fid }}">{{ f.label }}</label>
             {% if f.protected %}<div class="tag prot" title="Never filled from your profile">only you can answer</div>{% endif %}
-            {% if f.optional %}<div class="muted small">optional</div>{% endif %}</th>
+            {% if f.optional %}<div class="muted small">optional</div>{% elif f.field_id %}<div class="muted small">required</div>{% endif %}</th>
           <td>
-            <input id="fv_{{ loop.index }}" name="fv_{{ f.key }}" value="{{ f.value }}" {% if not editable %}disabled{% endif %}
-                   placeholder="{{ ('Optional: leave blank or answer' if blank_ok else 'NEEDS_HUMAN: type your answer') if f.state == 'needs_human' else '' }}" autocomplete="off">
+            {% if f.kind == 'select' and f.options %}
+              <select id="{{ fid }}" name="fv_{{ f.key }}" {{ dis }}>
+                <option value="">{{ '(optional: leave blank)' if f.optional else '(NEEDS_HUMAN: pick one)' }}</option>
+                {% for o in f.options %}<option {% if o == f.value %}selected{% endif %}>{{ o }}</option>{% endfor %}
+              </select>
+            {% elif f.kind == 'multi_select' and f.options %}
+              {% set chosen = f.value.split('; ') %}
+              <input type="hidden" name="fv_{{ f.key }}" value="" {{ dis }}>
+              <fieldset class="checks" id="{{ fid }}" {{ dis }}>
+                {% for o in f.options %}<label class="check"><input type="checkbox" name="fv_{{ f.key }}" value="{{ o }}" {% if o in chosen %}checked{% endif %}> {{ o }}</label>{% endfor %}
+              </fieldset>
+            {% elif f.kind == 'textarea' %}
+              <textarea id="{{ fid }}" name="fv_{{ f.key }}" rows="{{ 5 if f.value|length > 120 else 3 }}" {{ dis }}
+                placeholder="{{ 'Optional' if blank_ok else ('NEEDS_HUMAN: write your answer' if f.state == 'needs_human' else '') }}">{{ f.value }}</textarea>
+            {% elif f.kind == 'file' %}
+              <span class="muted small">Attach this yourself on the form.</span>
+            {% else %}
+              <input id="{{ fid }}" name="fv_{{ f.key }}" value="{{ f.value }}" {{ dis }}
+                     placeholder="{{ ('Optional: leave blank or answer' if blank_ok else 'NEEDS_HUMAN: type your answer') if f.state == 'needs_human' else '' }}" autocomplete="off">
+            {% endif %}
           </td>
           <td class="small">
             {% if blank_ok and not f.protected %}<span class="state op">Optional</span>
             {% elif f.state == 'needs_human' %}<span class="state nh">NEEDS_HUMAN</span>
             {% elif f.state == 'human' %}<span class="state hu">You</span>
+            {% elif f.state == 'draft' %}<span class="state dr">DRAFT</span>
             {% else %}<span class="state fi">Profile</span>{% endif %}
             <span class="muted">{{ f.source }}</span></td>
         </tr>
@@ -60,9 +99,9 @@
       </tbody>
     </table>
 
-    <h3>Written answers <span class="tag draft">DRAFT</span></h3>
-    <p class="muted small">Answers to open questions ("Why this company?"). They stay DRAFT until you approve. Phase 5
-      drafts them from facts in your resume and the posting only. For now you can add and write your own.</p>
+    <h3>Extra answers</h3>
+    <p class="muted small">Answers you want to keep with this application (e.g. for a question on a custom site).
+      Drafts for the form's own open questions are in the table above, marked DRAFT.</p>
     <input type="hidden" name="draft_count" value="{{ app.drafts|length }}">
     {% for d in app.drafts %}
       <div class="draft-box">
@@ -152,6 +191,26 @@
       <p class="muted">Not scored yet. Run <code>jobpilot match</code>.</p>
     {% endif %}
   </section>
+
+  {% if can_load_form %}
+  <section class="card">
+    <h2>Autofill</h2>
+    {% if run %}
+      <p><b>Last {{ 'dry run' if run.mode == 'dry_run' else 'fill' }}</b> {{ run.started_at|day }}:
+        {{ run.outcome|replace('_', ' ') }}.</p>
+      {% if run_steps %}
+      <ul class="steps small">
+        {% for st in run_steps %}<li class="a-{{ st.action }}"><b>{{ st.action|replace('_', ' ') }}</b> · {{ st.label }}
+          {% if st.value and st.action in ('would_fill', 'filled') %}<span class="muted">→ {{ st.value[:60] }}</span>{% elif st.note %}<span class="muted">({{ st.note }})</span>{% endif %}</li>{% endfor %}
+      </ul>
+      {% endif %}
+    {% else %}<p class="muted">Not run yet.</p>{% endif %}
+    <p class="small">Dry run (types nothing): <code>jobpilot autofill {{ job.id }}</code></p>
+    {% if job.status in ('approved', 'filled') %}
+      <p class="small">Fill, then stop before Submit: <code>jobpilot autofill {{ job.id }} --fill</code></p>
+    {% else %}<p class="muted small">Filling unlocks after you approve.</p>{% endif %}
+  </section>
+  {% endif %}
 
   <section class="card">
     <h2>Description</h2>

@@ -1,0 +1,59 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Job Application for Data Intern at Acme Robotics (fictional)</title>
+<style>.menu{border:1px solid #ccc}.menu[hidden]{display:none}</style></head>
+<body>
+<!-- A small stand-in for a Greenhouse job-boards form: same ids, a combobox like theirs, and a submit
+     button that posts with JavaScript. Fictional company; used only by the tests. -->
+<form id="application-form" action="" method="get">
+  <label for="first_name">First Name</label><input id="first_name" type="text" aria-required="true">
+  <label for="last_name">Last Name</label><input id="last_name" type="text">
+  <label for="email">Email</label><input id="email" type="text">
+  <label for="phone">Phone</label><input id="phone" type="tel">
+  <label for="resume">Resume</label><input id="resume" type="file">
+  <label for="question_1">LinkedIn Profile</label><input id="question_1" type="text">
+  <label id="question_2-label" for="question_2">Are you legally eligible to work in the United States?</label>
+  <input id="question_2" role="combobox" type="text" data-options="Yes|No">
+  <label id="question_3-label" for="question_3">Will you require visa sponsorship?</label>
+  <input id="question_3" role="combobox" type="text" data-options="Yes|No">
+  <fieldset><legend>Expected graduation</legend>
+    <input type="checkbox" id="question_4[]_1" name="question_4[]"><label for="question_4[]_1">Spring 2027</label>
+    <input type="checkbox" id="question_4[]_2" name="question_4[]"><label for="question_4[]_2">Fall 2027</label>
+  </fieldset>
+  <label for="question_5">Why do you want to work at Acme Robotics?</label><textarea id="question_5"></textarea>
+  <label for="question_6">How did you hear about us?</label><input id="question_6" type="text">
+  <label id="gender-label" for="gender">Gender</label>
+  <input id="gender" role="combobox" type="text" data-options="Decline To Self Identify|Female|Male">
+  <label><input type="checkbox" id="question_7"> I certify the information above is true</label>
+  <button type="submit" id="submit-btn">Submit application</button>
+</form>
+<div id="menu" class="menu" role="listbox" hidden></div>
+<script>
+  window.__posted = 0;
+  const menu = document.getElementById('menu');
+  let active = null;
+  function show(input) {
+    active = input;
+    const q = input.value.toLowerCase();
+    menu.innerHTML = '';
+    for (const o of input.dataset.options.split('|')) {
+      if (q && !o.toLowerCase().includes(q)) continue;
+      const d = document.createElement('div');
+      d.setAttribute('role', 'option'); d.textContent = o;
+      d.addEventListener('click', () => { active.value = o; active.dataset.chosen = o; menu.hidden = true; });
+      menu.appendChild(d);
+    }
+    menu.hidden = false;
+  }
+  document.querySelectorAll('[role=combobox]').forEach((el) => {
+    el.addEventListener('focus', () => show(el));
+    el.addEventListener('input', () => show(el));
+    el.addEventListener('keydown', (e) => { if (e.key === 'Escape') menu.hidden = true; });
+  });
+  // Like the real site: the button submits via JavaScript.
+  document.getElementById('application-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    window.__posted++;
+    fetch('https://job-boards.greenhouse.io/acmerobotics/jobs/999/applications', { method: 'POST', body: 'x' });
+  });
+</script>
+</body></html>

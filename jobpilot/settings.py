@@ -66,6 +66,11 @@ class MatchingSettings(BaseModel):
     enrich_per_run: int = Field(300, ge=0)  # descriptions to fetch per `jobpilot enrich`
 
 
+class AutofillSettings(BaseModel):
+    browser_channel: Literal["msedge", "chrome", "chromium"] = "msedge"  # an installed browser Playwright drives
+    slow_mo_ms: int = Field(60, ge=0, le=2000)  # pause between actions so you can watch
+
+
 class Settings(BaseModel):
     user_agent: str = "JobPilot/0.1 (personal job search assistant; respects robots.txt)"
     min_seconds_between_requests: float = Field(1.0, ge=0.5)  # per host, at least 0.5; robots.txt Crawl-delay wins if larger
@@ -74,6 +79,7 @@ class Settings(BaseModel):
     filter_by_profile: bool = True  # only keep jobs matching your role types / fields
     sources: Sources = Field(default_factory=Sources)
     matching: MatchingSettings = Field(default_factory=MatchingSettings)
+    autofill: AutofillSettings = Field(default_factory=AutofillSettings)
 
 
 HEADER = "# JobPilot settings. Safe to edit; delete the file to reset to defaults.\n\n"

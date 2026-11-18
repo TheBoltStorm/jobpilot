@@ -15,8 +15,8 @@ All personal data stays on your machine, in `data/` (gitignored).
 | 2 | Job discovery sources + dedupe | ✅ done |
 | 3 | Matching + skill-gap report | ✅ done (free local engine; Claude optional) |
 | 4 | Review dashboard | ✅ done |
-| 5 | Autofill (Greenhouse, dry run) | next |
-| 6 | Scaling + polish | planned |
+| 5 | Autofill (Greenhouse, dry run) | ✅ done (fill mode works; you always submit) |
+| 6 | Scaling + polish | next |
 
 ## Setup
 
@@ -117,6 +117,20 @@ How the gate works:
 The dashboard only answers on 127.0.0.1. Every button needs a token that's created when it starts,
 and requests from other websites are refused, so a page you visit can't press Approve for you.
 
+## Autofill
+
+```bash
+jobpilot forms fetch 123        # load the posting's real questions (Greenhouse public API)
+jobpilot autofill 123           # dry run: outlines what it would fill, types nothing
+jobpilot autofill 123 --fill    # approved jobs only: fills, then waits for you to click Submit
+```
+
+The review page shows each of the form's own questions and where its answer comes from: your
+profile, a DRAFT built from facts, your answer, or NEEDS_HUMAN. Autofill only uses what you approved.
+It never clicks Submit or presses Enter, and guards in the page and on the network block submission
+while it works. CAPTCHAs and sign-in pages stop it. It uses Microsoft Edge (or Chrome) already on
+your computer. Details: [docs/AUTOFILL.md](docs/AUTOFILL.md).
+
 ### Commands
 
 | Command | Does |
@@ -139,6 +153,8 @@ and requests from other websites are refused, so a page you visit can't press Ap
 | `jobpilot runs` | Scoring run log with token cost. |
 | `jobpilot prepare` | Sort matched jobs into Ready to fill / Needs human / Custom site. Fills and sends nothing. |
 | `jobpilot dashboard [--port 8765] [--no-browser]` | Open the local review dashboard. |
+| `jobpilot forms fetch [ID] [--limit N] [--all]` / `forms show ID` | Load (or show) a posting's real application questions. |
+| `jobpilot autofill ID [--fill] [--headless] [--browser msedge\|chrome]` | Dry run (default) or fill an approved application. Never submits. |
 | `jobpilot export FILE.csv\|FILE.xlsx` | Export the applications log (no answers or personal details). |
 
 ## Rules JobPilot follows
@@ -151,7 +167,8 @@ and requests from other websites are refused, so a page you visit can't press Ap
    veteran and disability status, salary, background checks and anything legally binding are never
    stored in the profile and never auto-filled. The profile refuses to save them
    (see [`jobpilot/core/protected.py`](jobpilot/core/protected.py)).
-4. **No CAPTCHA solving, no bot-detection workarounds, no accounts created for you.**
+4. **No CAPTCHA solving, no bot-detection workarounds, no accounts created for you.** Autofill stops at
+   CAPTCHAs and sign-in pages.
 5. **Polite sources only.** Public APIs and feeds that allow it, rate-limited (never faster than one request
    per 0.5 s per site), robots.txt respected.
    No LinkedIn/Indeed scraping.
@@ -178,6 +195,9 @@ jobpilot/
   enrich.py              fetch missing descriptions via public ATS APIs
   matching/              skills.yaml list, local scorer, optional Claude engine, gap report
   review/                statuses + the human gate, application plans, applications log export
+                         + field mapper (mapping.py) and fact-only drafts (drafts.py)
+  forms/                 real application questions from public ATS APIs (Greenhouse)
+  autofill/              Playwright filler: dry run / fill, submit guards, run log
   web/                   dashboard (FastAPI, templates, static)
   onboarding/
     resume_parser.py     PDF/DOCX -> text -> sections -> structured data (with source lines)

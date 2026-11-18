@@ -39,6 +39,11 @@ class PlanField:
     state: str = NEEDS_HUMAN  # filled | needs_human | human
     protected: str = ""  # protected category, if any
     optional: bool = False  # e.g. GPA, portfolio: fine to leave blank
+    field_id: str = ""  # the form element (real forms only)
+    kind: str = "text"  # text | textarea | file | select | multi_select | search_select | location
+    options: list[str] = field(default_factory=list)
+    section: str = ""
+    maps_to: str = ""  # profile key, "protected:<category>" or "short:<question>"
 
     @property
     def unanswered(self) -> bool:
@@ -79,8 +84,8 @@ def _standard(profile: Profile, resume_label: str) -> list[PlanField]:
         ("earliest_start", "Earliest start date", profile.targets.earliest_start, "profile: targets.earliest_start",
          True),
     ]
-    return [PlanField(k, label, v, src if v else "not in your profile", FILLED if v else NEEDS_HUMAN, "", opt)
-            for k, label, v, src, opt in rows]
+    return [PlanField(k, label, v, src if v else "not in your profile", FILLED if v else NEEDS_HUMAN, "", opt,
+                      maps_to=k) for k, label, v, src, opt in rows]
 
 
 # Questions nearly every application asks that only you may answer. Phase 5 swaps these
@@ -99,23 +104,56 @@ TYPICAL_PROTECTED = [
 def build_fields(profile: Profile, resume_label: str) -> list[PlanField]:
     fields = _standard(profile, resume_label)
     for q, a in profile.short_answers.items():
-        fields.append(PlanField(f"short:{q}", q, a, "profile: short_answers", FILLED if a else NEEDS_HUMAN))
+        fields.append(PlanField(f"short:{q}", q, a, "profile: short_answers", FILLED if a else NEEDS_HUMAN,
+                                maps_to=f"short:{q}"))
     for cat, label, optional in TYPICAL_PROTECTED:
-        fields.append(PlanField(f"protected:{cat}", label, "", "only you can answer this", NEEDS_HUMAN, cat, optional))
+        fields.append(PlanField(f"protected:{cat}", label, "", "only you can answer this", NEEDS_HUMAN, cat, optional,
+                                maps_to=f"protected:{cat}"))
     return fields
 
 
-def merge_human(fresh: list[PlanField], saved: list[dict]) -> list[PlanField]:
-    """Keep what you typed on the review page; refresh everything else from the profile."""
+def plan_fields(conn: sqlite3.Connection, job: sqlite3.Row, profile: Profile, resume_label: str) -> list[PlanField]:
+    """The real form's questions when we have them, else the standard fields every ATS asks for."""
+    from jobpilot.forms import load_form
+    from jobpilot.review.mapping import plan_from_form
+
+    form = load_form(conn, job["id"])
+    if not form:
+        return build_fields(profile, resume_label)
+    m = conn.execute("SELECT skills_json FROM matches WHERE job_id = ?", (job["id"],)).fetchone()
+    skills = json.loads(m["skills_json"]).get("skills", []) if m else []
+    return plan_from_form(form[1], profile, resume_label, job, skills)
+
+
+def merge_human(fresh: list[PlanField], saved: list[dict], keep_extra: bool = True) -> list[PlanField]:
+    """Keep what you typed on the review page; refresh everything else from the profile.
+
+    Answers carry over by question, or by what the question means (maps_to) when the plan
+    switched from standard fields to the real form. A carried-over answer to a question
+    with fixed options is only kept if it clearly matches one of them.
+    """
+    from jobpilot.review.mapping import fit_option
+
     human = {f["key"]: f for f in saved if f.get("state") == HUMAN}
+    # Plans saved before maps_to existed used the meaning as the key ("email", "protected:sponsorship").
+    by_meaning = {f.get("maps_to") or f["key"]: f for f in human.values()}
     out = []
     for f in fresh:
         h = human.pop(f.key, None)
+        if h is None and f.maps_to and f.maps_to in by_meaning:
+            h = by_meaning[f.maps_to]
+            human.pop(h["key"], None)
         if h is not None:
-            f.value, f.source, f.state = h["value"], h["source"], HUMAN
+            value = h["value"]
+            if f.options and f.kind in ("select", "multi_select"):
+                parts = [fit_option(v, f.options) for v in value.split("; ")] if value else []
+                value = "; ".join(p for p in parts if p) if parts and all(parts) else ""
+            if value or not h["value"]:
+                f.value, f.source, f.state = value, h["source"], HUMAN
         out.append(f)
-    for h in human.values():  # answers to questions that aren't in the fresh plan (e.g. added later)
-        out.append(PlanField(**{k: h[k] for k in PlanField.__dataclass_fields__ if k in h}))
+    if keep_extra:  # answers to questions that aren't in the fresh plan (e.g. added later)
+        for h in human.values():
+            out.append(PlanField(**{k: h[k] for k in PlanField.__dataclass_fields__ if k in h}))
     return out
 
 
@@ -205,8 +243,9 @@ def prepare(conn: sqlite3.Connection, job_id: int, profile: Profile) -> Applicat
     if app and job["status"] not in PRE_APPROVAL:
         return app
     label = app.resume_label if app and app.resume_label else default_resume_label(conn, profile)
-    fresh = build_fields(profile, label)
-    fields = merge_human(fresh, [asdict(f) for f in app.fields]) if app else fresh
+    fresh = plan_fields(conn, job, profile, label)
+    has_form = any(f.field_id for f in fresh)
+    fields = merge_human(fresh, [asdict(f) for f in app.fields], keep_extra=not has_form) if app else fresh
     if app:
         app.fields, app.resume_label = fields, label
     else:
@@ -241,6 +280,10 @@ def save_answers(conn: sqlite3.Connection, job_id: int, profile: Profile, values
         new = values[f.key].strip()
         if new == f.value:
             continue
+        if new and f.options and f.kind in ("select", "multi_select"):
+            bad = [v for v in new.split("; ") if v not in f.options]
+            if bad or (f.kind == "select" and "; " in new):
+                raise GateError(f"'{f.label}': pick from the form's options")
         if new:
             f.value, f.state, f.source = new, HUMAN, f"you, on the review page ({now_iso()[:10]})"
         else:  # cleared: fall back to the profile value (rebuilt below), or NEEDS_HUMAN
@@ -257,7 +300,8 @@ def save_answers(conn: sqlite3.Connection, job_id: int, profile: Profile, values
             if f.key == "resume":
                 f.value, f.state, f.source = resume_label, HUMAN, "you picked this resume version"
     # Refill cleared non-protected fields from the profile.
-    fresh = {f.key: f for f in build_fields(profile, app.resume_label)}
+    job_row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    fresh = {f.key: f for f in plan_fields(conn, job_row, profile, app.resume_label)}
     for i, f in enumerate(app.fields):
         if f.state == NEEDS_HUMAN and f.key in fresh and fresh[f.key].state == FILLED:
             app.fields[i] = fresh[f.key]
@@ -331,3 +375,26 @@ def queue(conn: sqlite3.Connection, limit: int = 50) -> list[sqlite3.Row]:
 def protected_label(label: str) -> str:
     """Category for a free-form question label, used when you add your own question."""
     return protected_category(label) or ""
+
+
+def load_real_form(conn: sqlite3.Connection, job_id: int, profile: Profile, http, gh_tokens: dict[str, str],
+                   llm_map=None) -> Application:
+    """Fetch a job's real questions, then re-plan. An approval covered different questions, so it's withdrawn."""
+    from jobpilot.forms import fetch_form
+
+    job = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    if not job:
+        raise GateError(f"no job {job_id}")
+    try:
+        fetch_form(conn, http, job, gh_tokens, llm_map, profile)
+    except Exception as exc:  # HTTP errors, robots.txt refusals, bad JSON, unsupported sites
+        raise GateError(f"Couldn't load the form: {exc}") from exc
+    log_event(conn, job_id, "system", "loaded the real form questions")
+    if job["status"] in ("approved", "filled"):
+        app = load_application(conn, job_id)
+        if app:
+            app.approved_at, app.approved_snapshot = None, None
+            save_application(conn, app)
+        transition(conn, job_id, "needs_human", actor="system", action="approval withdrawn",
+                   note="the real form's questions were loaded; review and approve again")
+    return prepare(conn, job_id, profile)
