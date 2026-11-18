@@ -168,6 +168,37 @@
 </form>
 
 <aside>
+  {% if outcome %}
+  <section class="card actions" id="outcome">
+    <div class="card-head"><h2>After you applied</h2>
+      <span class="muted small">applied {{ app.submitted_at|day if app and app.submitted_at else '' }}</span></div>
+    <form method="post" action="/applied/{{ job.id }}">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="/jobs/{{ job.id }}">
+      <label class="row">Stage
+        <select name="stage">{% for s in STAGES %}<option value="{{ s.key }}" {% if outcome.stage == s.key %}selected{% endif %}>{{ s.label }}</option>{% endfor %}</select>
+        <input type="date" name="on" aria-label="When it happened" title="When it happened (default today)" class="w6"></label>
+      <label class="row">Next step <input type="date" name="next_at" value="{{ outcome.next_at or '' }}" class="w6">
+        <input name="next_note" value="{{ outcome.next_note }}" placeholder="e.g. phone screen with recruiter" style="flex:1"></label>
+      <label class="block"><span class="small muted">Note for the history (optional)</span><input name="note"></label>
+      <div class="btns"><button class="btn primary small-btn" name="action" value="outcome">Save</button>
+        <span class="muted small">Follow-ups sent: {{ outcome.followups }}{% if outcome.last_followup_at %} (last {{ outcome.last_followup_at|day }}){% endif %}</span></div>
+    </form>
+    {% if outcome_draft and BY_KEY[outcome.stage].active %}
+    <details class="draft-mail">
+      <summary class="small">{{ 'Thank-you note' if outcome.stage in ('interview', 'final') else 'Follow-up' }} draft</summary>
+      <div class="small"><span class="tag draft">DRAFT</span> <b>Subject:</b> <span data-copy-src>{{ outcome_draft[0] }}</span></div>
+      <textarea rows="7" aria-label="Draft message" data-copy-body>{{ outcome_draft[1] }}</textarea>
+      <form method="post" action="/applied/{{ job.id }}" class="btns">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="/jobs/{{ job.id }}">
+        <button type="button" class="btn small-btn" data-copy>Copy draft</button>
+        <button class="btn small-btn" name="action" value="followup_sent">I sent it</button>
+        <span class="muted small">JobPilot never sends it for you.</span>
+      </form>
+    </details>
+    {% endif %}
+  </section>
+  {% endif %}
+
   {% if qual %}
   <section class="card" id="requirements">
     <div class="card-head"><h2>Minimum requirements</h2>

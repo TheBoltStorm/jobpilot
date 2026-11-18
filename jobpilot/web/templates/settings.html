@@ -59,6 +59,16 @@
     <label class="block">User agent <input name="user_agent" value="{{ s.user_agent }}"></label>
   </section>
 
+  <section class="card">
+    <h2>Follow-ups</h2>
+    <p class="muted small">When a quiet application shows up as due on the Applied page. JobPilot only drafts the
+      message; you send it yourself.</p>
+    <label class="row">First follow-up after <input type="number" min="1" max="60" name="fu_first" value="{{ s.followups.first_after_days }}" class="w4"> days</label>
+    <label class="row">Then every <input type="number" min="1" max="60" name="fu_every" value="{{ s.followups.then_every_days }}" class="w4"> days, at most
+      <input type="number" min="0" max="5" name="fu_max" value="{{ s.followups.max_followups }}" class="w4"> follow-ups</label>
+    <label class="row">Suggest "No response" after <input type="number" min="7" max="180" name="fu_quiet" value="{{ s.followups.quiet_after_days }}" class="w4"> days</label>
+  </section>
+
   <div class="btns"><button class="btn primary">Save settings</button></div>
 </form>
 {% endblock %}

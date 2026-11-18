@@ -71,6 +71,13 @@ class AutofillSettings(BaseModel):
     slow_mo_ms: int = Field(60, ge=0, le=2000)  # pause between actions so you can watch
 
 
+class FollowupSettings(BaseModel):
+    first_after_days: int = Field(7, ge=1, le=60)  # first follow-up this long after applying
+    then_every_days: int = Field(7, ge=1, le=60)
+    max_followups: int = Field(2, ge=0, le=5)
+    quiet_after_days: int = Field(30, ge=7, le=180)  # then suggest marking "No response"
+
+
 class Settings(BaseModel):
     user_agent: str = "JobPilot/0.1 (personal job search assistant; respects robots.txt)"
     min_seconds_between_requests: float = Field(1.0, ge=0.5)  # per host, at least 0.5; robots.txt Crawl-delay wins if larger
@@ -80,6 +87,7 @@ class Settings(BaseModel):
     sources: Sources = Field(default_factory=Sources)
     matching: MatchingSettings = Field(default_factory=MatchingSettings)
     autofill: AutofillSettings = Field(default_factory=AutofillSettings)
+    followups: FollowupSettings = Field(default_factory=FollowupSettings)
 
 
 HEADER = "# JobPilot settings. Safe to edit; delete the file to reset to defaults.\n\n"

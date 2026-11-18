@@ -27,7 +27,7 @@ from jobpilot.forms import FORM_ATS
 from jobpilot.core import db
 from jobpilot.onboarding.profile import load_profile
 from jobpilot.matching.skills import load_taxonomy
-from jobpilot.review import export, plan, tailor
+from jobpilot.review import export, outcomes, plan, tailor
 from jobpilot.review.status import LABELS, PRE_APPROVAL, STATUSES, GateError
 from jobpilot.settings import Settings, load_settings, save_settings
 
@@ -46,6 +46,8 @@ MESSAGES = {
     "settings": "Settings saved. They apply to the next discover / match run.",
     "queue_empty": "Nothing left to review. Run discover and match for more.",
     "form_loaded": "Loaded the real form's questions. Check the answers below.",
+    "outcome": "Updated.",
+    "followup_sent": "Recorded your follow-up. JobPilot didn't send anything; it just noted the date.",
     "tailored": "Suggested a tailored order. Check the changes under Tailored resume.",
     "tailor_approved": "Created the tailored resume and picked it for this application.",
     "tailor_discarded": "Discarded the tailored version.",
@@ -66,6 +68,7 @@ def create_app(paths: Paths) -> FastAPI:
 
     def render(request: Request, name: str, status_code: int = 200, **ctx) -> HTMLResponse:
         ctx.setdefault("msg", MESSAGES.get(request.query_params.get("msg", ""), ""))
+        ctx.setdefault("error", request.query_params.get("err", "")[:300])
         ctx.setdefault("profile_missing", not paths.profile.is_file())
         return templates.TemplateResponse(request, name, ctx, status_code=status_code)
 
@@ -204,7 +207,11 @@ def create_app(paths: Paths) -> FastAPI:
             qual_counts = dict(conn.execute(
                 """SELECT q.status, COUNT(*) FROM qualifications q JOIN jobs j ON j.id = q.job_id
                    WHERE j.status IN ('found','matched','ready_to_fill','needs_human') GROUP BY q.status""").fetchall())
-        return render(request, "board.html", counts=counts, total=sum(counts.values()), queue=queue, recent=recent,
+            with conn:
+                outcomes.ensure(conn)
+            due_n = len(outcomes.due(conn, outcomes.FollowupRules.from_settings(settings())))
+            responded = conn.execute("SELECT COUNT(*) FROM outcomes WHERE responded_at IS NOT NULL").fetchone()[0]
+        return render(request, "board.html", due_n=due_n, responded=responded, counts=counts, total=sum(counts.values()), queue=queue, recent=recent,
                       undescribed=undescribed, qualify=qualify, qual_counts=qual_counts)
 
     @app.post("/prepare")
@@ -214,6 +221,58 @@ def create_app(paths: Paths) -> FastAPI:
         with db.connect(paths.db) as conn:
             plan.prepare_matched(conn, profile)
         return go("/", "prepared")
+
+    # ------------------------------------------------------------ after you apply
+
+    def outcome_action(conn, job_id: int, form) -> str:
+        """Apply one outcome form action. Returns the message key."""
+        action = str(form.get("action", ""))
+        with conn:
+            if action == "outcome":
+                outcomes.set_stage(conn, job_id, str(form.get("stage", "")), str(form.get("note", "")).strip(),
+                                   str(form.get("on", "")).strip() or None)
+                if "next_at" in form:
+                    outcomes.set_next(conn, job_id, str(form.get("next_at", "")).strip() or None,
+                                      str(form.get("next_note", "")))
+                return "outcome"
+            if action == "followup_sent":
+                outcomes.followup_sent(conn, job_id)
+                return "followup_sent"
+            if action in ("mute", "unmute"):
+                outcomes.mute(conn, job_id, action == "mute")
+                return "saved"
+        raise GateError(f"Unknown action {action!r}.")
+
+    @app.get("/applied", response_class=HTMLResponse)
+    def applied(request: Request, stage: str = ""):
+        profile = load_profile(paths.profile)
+        rules = outcomes.FollowupRules.from_settings(settings())
+        with db.connect(paths.db) as conn:
+            with conn:
+                outcomes.ensure(conn)
+            due = outcomes.due(conn, rules)
+            drafts = {d.job_id: outcomes.draft(d.kind, d.title, d.company, d.submitted, profile) for d in due}
+            soon = outcomes.upcoming(conn)
+            where, params = ("WHERE o.stage = ?", [stage]) if stage in outcomes.BY_KEY else ("", [])
+            rows = conn.execute(
+                f"""SELECT o.*, j.title, j.company, a.submitted_at, a.resume_label,
+                           (SELECT GROUP_CONCAT(area, ' · ') FROM job_places p WHERE p.job_id = j.id) areas
+                    FROM outcomes o JOIN jobs j ON j.id = o.job_id LEFT JOIN applications a ON a.job_id = j.id
+                    {where} ORDER BY a.submitted_at DESC""", params).fetchall()
+            st = outcomes.stats(conn)
+        return render(request, "applied.html", rows=rows, due=due, drafts=drafts, soon=soon, stats=st,
+                      stage=stage, STAGES=outcomes.STAGES, BY_KEY=outcomes.BY_KEY, rules=rules)
+
+    @app.post("/applied/{job_id}")
+    async def applied_action(request: Request, job_id: int):
+        form = await posted(request)
+        back = str(form.get("back", "/applied"))
+        back = back if back.startswith("/") and not back.startswith("//") else "/applied"
+        with db.connect(paths.db) as conn:
+            try:
+                return go(back, outcome_action(conn, job_id, form))
+            except GateError as exc:
+                return go(back + ("&" if "?" in back else "?") + urlencode({"err": str(exc)}))
 
     # ------------------------------------------------------------ jobs list
 
@@ -260,7 +319,16 @@ def create_app(paths: Paths) -> FastAPI:
 
         refresh_indexes(conn, profile)
         job_areas = [r["area"] for r in conn.execute("SELECT area FROM job_places WHERE job_id = ?", (job_id,))]
-        return dict(qual=minimums.load(conn, job_id), job_areas=job_areas,tailored=tailored, tailor_moves=tailor.moves(tailored), job=job, match=match, skills=grouped, app=app_, events=events, sources=sources,
+        outcome = draft_ = None
+        if job["status"] == "submitted":
+            outcomes.ensure(conn)
+            outcome = outcomes.load(conn, job_id)
+            app_row = conn.execute("SELECT submitted_at FROM applications WHERE job_id = ?", (job_id,)).fetchone()
+            sub = outcomes._day(app_row["submitted_at"]) if app_row else None
+            kind = "thank_you" if outcome and outcome["stage"] in ("interview", "final") else "followup"
+            draft_ = outcomes.draft(kind, job["title"], job["company"], sub, profile)
+        return dict(outcome=outcome, outcome_draft=draft_, STAGES=outcomes.STAGES, BY_KEY=outcomes.BY_KEY,
+                    qual=minimums.load(conn, job_id), job_areas=job_areas, tailored=tailored, tailor_moves=tailor.moves(tailored), job=job, match=match, skills=grouped, app=app_, events=events, sources=sources,
                     resumes=resumes, next_id=nxt, editable=job["status"] in (*PRE_APPROVAL, "approved", "filled"),
                     form=form_row, can_load_form=job["ats"] in FORM_ATS, run=run, run_steps=run_steps)
 
@@ -487,6 +555,9 @@ def settings_from_form(current: Settings, form) -> Settings:
     data["request_timeout_seconds"] = num("request_timeout_seconds", float)
     data["max_age_days"] = num("max_age_days", int)
     data["filter_by_profile"] = form.get("filter_by_profile") == "on"
+    if "fu_first" in form:
+        data["followups"] = {"first_after_days": num("fu_first", int), "then_every_days": num("fu_every", int),
+                             "max_followups": num("fu_max", int), "quiet_after_days": num("fu_quiet", int)}
     src = data["sources"]
     for name in ("github_lists", "greenhouse", "lever", "ashby", "usajobs", "rss"):
         src[name]["enabled"] = form.get(f"src_{name}") == "on"

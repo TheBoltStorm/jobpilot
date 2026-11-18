@@ -166,6 +166,31 @@ the page shows you what moved. **Approve and create DOCX** (or `jobpilot tailor 
 plain DOCX built from your profile to `data/resumes/`, adds it as a resume version, and picks it for that
 application. Your other versions don't change.
 
+## After you apply
+
+Once you've clicked Submit on the site and marked the job **Submitted**, it shows up on **Applied**.
+There you set its stage yourself (recruiter screen, interview, offer, not selected, no response, ...)
+and, if you like, the date of the next step. JobPilot never changes a stage on its own.
+
+**Follow-ups.** When an application has been quiet for a while (7 days by default, then every 7 days,
+at most 2 follow-ups; change this under Settings), the **To do** list shows a short DRAFT message. After an
+interview, it suggests a thank-you note instead. Drafts use only facts: the role, the company, the date you
+applied, your name and email. JobPilot never sends them. Copy the draft, send it from your own email, then
+click **I sent it** so it records the date. After 30 quiet days it suggests marking the application
+**No response**.
+
+**What's working.** Response, interview and offer rates overall and by source, site, field, match score,
+resume version and whether you met the minimums, plus how long replies usually take. The numbers mean
+more once you have a few dozen applications.
+
+```bash
+jobpilot applied                          # your applications and their stages
+jobpilot outcome 123 interview --next 2026-12-02 --next-note "onsite"
+jobpilot followups --drafts               # what's due, with drafts you send yourself
+jobpilot followups --sent 123             # record that you sent one
+jobpilot stats
+```
+
 ## Autofill
 
 ```bash
@@ -209,6 +234,10 @@ Details: [docs/AUTOFILL.md](docs/AUTOFILL.md).
 | `jobpilot places [--region R] [--top N]` | Open jobs by region and area. |
 | `jobpilot qualify [--close] [--region R] [--area A]` | Jobs where you meet every minimum requirement (or are one short). |
 | `jobpilot tailor ID [--approve\|--discard]` | Suggest a resume reordered for one job; approve to create the DOCX. |
+| `jobpilot applied` | Your submitted applications and their stages. |
+| `jobpilot outcome ID STAGE [--on DATE] [--note N] [--next DATE] [--next-note N]` | Record what happened with an application. Only you set this. |
+| `jobpilot followups [--drafts] [--sent ID] [--mute ID]` | Follow-ups due, with drafts. JobPilot never sends them. |
+| `jobpilot stats` | Response, interview and offer rates, and what's working. |
 | `jobpilot run [--skip-discover] [--enrich-limit N] [--forms-limit N]` | The daily pipeline: discover, enrich, match, prepare, load forms. Fills nothing. |
 | `jobpilot doctor [--no-browser]` | Check your setup and say how to fix anything missing. |
 | `jobpilot export FILE.csv\|FILE.xlsx` | Export the applications log (no answers or personal details). |

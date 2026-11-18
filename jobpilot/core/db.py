@@ -193,6 +193,21 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX qualifications_status ON qualifications(status);
     """,
+    # v8: what happened after you applied, and follow-ups you sent yourself
+    """
+    CREATE TABLE outcomes (
+        job_id           INTEGER PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
+        stage            TEXT NOT NULL DEFAULT 'waiting',  -- only you change this
+        stage_at         TEXT,
+        responded_at     TEXT,                  -- first time the employer got back to you
+        next_at          TEXT,                  -- date of the next step (interview, deadline)
+        next_note        TEXT NOT NULL DEFAULT '',
+        followups        INTEGER NOT NULL DEFAULT 0,
+        last_followup_at TEXT,
+        muted            INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX outcomes_stage ON outcomes(stage);
+    """,
 ]
 
 

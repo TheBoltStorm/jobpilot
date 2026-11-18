@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Applied{% endblock %}
+{% block content %}
+{% set o = stats.overall %}
+<div class="page-head">
+  <h1>Applied</h1>
+  <span class="sub">{{ o.applied }} applications · {{ o.pct(o.responded) }}% heard back · {{ o.interviews }} interviews · {{ o.offers }} offers
+    {% if stats.median_days_to_reply is not none %} · usually {{ stats.median_days_to_reply }} days to a reply{% endif %}</span>
+</div>
+
+<ul class="chips" aria-label="Stages">
+  <li><a class="chip" href="/applied" {% if not stage %}aria-current="true"{% endif %}>All <b>{{ o.applied }}</b></a></li>
+  {% for s in STAGES if stats.by_stage.get(s.key) %}
+  <li><a class="chip" href="/applied?stage={{ s.key }}" {% if stage == s.key %}aria-current="true"{% endif %}>{{ s.label }} <b>{{ stats.by_stage[s.key] }}</b></a></li>
+  {% endfor %}
+</ul>
+
+{% if not o.applied %}
+<section class="card"><p class="muted">Nothing here yet. When you've clicked Submit on a site, mark the job submitted on
+  its page. It then shows up here so you can track replies and follow-ups.</p></section>
+{% endif %}
+
+{% if due %}
+<section class="card" id="due">
+  <div class="card-head"><h2>To do ({{ due|length }})</h2>
+    <span class="muted small">JobPilot never sends anything. Copy the draft, send it yourself, then click "I sent it".</span></div>
+  {% for d in due %}
+  {% set subj, body = drafts[d.job_id] %}
+  <details class="followup" {% if loop.first %}open{% endif %}>
+    <summary>
+      {% if d.kind == 'thank_you' %}<span class="tag q-qualify">thank-you note</span>
+      {% elif d.kind == 'quiet' %}<span class="tag">{{ d.days }} days, no reply</span>
+      {% else %}<span class="tag q-close">follow-up {{ d.followups + 1 }}</span>{% endif %}
+      <b>{{ d.title }}</b> <span class="muted">· {{ d.company }} · {{ BY_KEY[d.stage].label|lower }}, {{ d.days }} days quiet</span>
+    </summary>
+    {% if d.kind == 'quiet' %}
+      <p class="small">You've followed up {{ d.followups }} time{{ '' if d.followups == 1 else 's' }} and it's been {{ d.days }} days.
+        If you think it's over, mark it <i>No response</i>; you can change it back any time.</p>
+      <form method="post" action="/applied/{{ d.job_id }}" class="btns">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="/applied">
+        <input type="hidden" name="stage" value="no_response">
+        <button class="btn small-btn" name="action" value="outcome">Mark No response</button>
+        <button class="btn small-btn" name="action" value="mute">Stop reminding me</button>
+      </form>
+    {% else %}
+      <div class="draft-mail">
+        <div class="small"><span class="tag draft">DRAFT</span> <b>Subject:</b> <span data-copy-src>{{ subj }}</span></div>
+        <textarea rows="7" aria-label="Draft message" data-copy-body>{{ body }}</textarea>
+        <p class="muted small">Built only from facts: the role, the company, when you applied, your name and email. Add the recipient
+          and anything personal yourself.</p>
+      </div>
+      <form method="post" action="/applied/{{ d.job_id }}" class="btns">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="/applied">
+        <button type="button" class="btn small-btn" data-copy>Copy draft</button>
+        <button class="btn primary small-btn" name="action" value="followup_sent">I sent it</button>
+        <button class="btn small-btn" name="action" value="mute">Stop reminding me</button>
+        <a class="small" href="/jobs/{{ d.job_id }}">Open job</a>
+      </form>
+    {% endif %}
+  </details>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if soon %}
+<section class="card">
+  <h2>Coming up</h2>
+  <ul class="list">
+    {% for r in soon %}<li><span class="nowrap"><b>{{ r.next_at }}</b></span>
+      <span class="grow clip"><a href="/jobs/{{ r.job_id }}">{{ r.title }}</a> <span class="muted">· {{ r.company }}</span></span>
+      <span class="muted small">{{ r.next_note }}</span></li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if rows %}
+<div class="table-wrap">
+<table class="jobs applied">
+  <thead><tr><th>Job</th><th class="hide-sm">Applied</th><th>Stage</th><th class="hide-sm">Follow-ups</th><th class="hide-sm">Next step</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr>
+    <td><a class="t" href="/jobs/{{ r.job_id }}">{{ r.title }}</a>
+      <div class="meta">{{ r.company }}{% if r.areas %} · {{ r.areas }}{% endif %}{% if '-for-job-' in (r.resume_label or '') %} · tailored resume{% endif %}</div></td>
+    <td class="small nowrap muted hide-sm">{{ r.submitted_at|day if r.submitted_at else '–' }}</td>
+    <td>
+      <form method="post" action="/applied/{{ r.job_id }}" data-autosubmit>
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="/applied{% if stage %}?stage={{ stage }}{% endif %}">
+        <input type="hidden" name="action" value="outcome">
+        <select name="stage" aria-label="Stage">
+          {% for s in STAGES %}<option value="{{ s.key }}" {% if r.stage == s.key %}selected{% endif %}>{{ s.label }}</option>{% endfor %}
+        </select>
+        <noscript><button class="btn small-btn">Save</button></noscript>
+      </form>
+      <div class="meta">since {{ r.stage_at|day if r.stage_at else '–' }}</div>
+    </td>
+    <td class="small hide-sm">{{ r.followups }}{% if r.last_followup_at %} <span class="muted">(last {{ r.last_followup_at|day }})</span>{% endif %}{% if r.muted %} <span class="tag">muted</span>{% endif %}</td>
+    <td class="small hide-sm">{% if r.next_at %}<b>{{ r.next_at }}</b> {{ r.next_note }}{% else %}<span class="muted">–</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+{% if o.applied %}
+<details class="card" {% if o.applied >= 10 %}open{% endif %}>
+  <summary>What's working</summary>
+  {% if o.applied < 10 %}<p class="muted small">Only {{ o.applied }} applications so far. Rates get meaningful after a few dozen.</p>{% endif %}
+  <div class="grid2">
+  {% for group, rates in stats.groups.items() if rates|length > 1 or group == 'Source' %}
+    <div>
+      <h3>{{ group }}</h3>
+      <table class="tight small">
+        <thead><tr><th></th><th class="num">Applied</th><th class="num">Heard back</th><th class="num">Interview</th><th class="num">Offer</th></tr></thead>
+        <tbody>{% for r in rates %}
+          <tr><td>{{ r.group }}</td><td class="num">{{ r.applied }}</td><td class="num">{{ r.pct(r.responded) }}%</td>
+            <td class="num">{{ r.pct(r.interviews) }}%</td><td class="num">{{ r.pct(r.offers) }}%</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endfor %}
+  </div>
+</details>
+{% endif %}
+{% endblock %}

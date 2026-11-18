@@ -662,6 +662,109 @@ def cmd_qualify(args) -> int:
     return 0
 
 
+def cmd_applied(args) -> int:
+    from jobpilot.review import outcomes
+
+    paths = get_paths(args.home)
+    with db.connect(paths.db) as conn:
+        with conn:
+            outcomes.ensure(conn)
+        rows = conn.execute(
+            """SELECT o.*, j.title, j.company, a.submitted_at FROM outcomes o JOIN jobs j ON j.id = o.job_id
+               LEFT JOIN applications a ON a.job_id = j.id ORDER BY a.submitted_at DESC""").fetchall()
+    if not rows:
+        print("No submitted applications yet. Mark a job submitted on its page after you click Submit on the site.")
+        return 0
+    for r in rows:
+        nxt = f"  next: {r['next_at']} {r['next_note']}" if r["next_at"] else ""
+        print(f"{r['job_id']:>6}  {(r['submitted_at'] or '')[:10]:<10}  {outcomes.BY_KEY[r['stage']].label:<22}  "
+              f"{r['company'][:20]:<20}  {r['title'][:40]:<40}  follow-ups: {r['followups']}{nxt}")
+    print("\nChange a stage: `jobpilot outcome ID STAGE`. Stages: " + ", ".join(s.key for s in outcomes.STAGES))
+    return 0
+
+
+def cmd_outcome(args) -> int:
+    from jobpilot.review import outcomes
+    from jobpilot.review.status import GateError
+
+    paths = get_paths(args.home)
+    with db.connect(paths.db) as conn:
+        try:
+            with conn:
+                outcomes.set_stage(conn, args.id, args.stage, args.note or "", args.on)
+                if args.next is not None:
+                    outcomes.set_next(conn, args.id, args.next or None, args.next_note or "")
+        except GateError as exc:
+            print(exc, file=sys.stderr)
+            return 1
+    print(f"Job {args.id}: {outcomes.BY_KEY[args.stage].label}.")
+    return 0
+
+
+def cmd_followups(args) -> int:
+    from jobpilot.onboarding.profile import load_profile
+    from jobpilot.review import outcomes
+    from jobpilot.review.status import GateError
+    from jobpilot.settings import load_settings
+
+    paths = get_paths(args.home)
+    rules = outcomes.FollowupRules.from_settings(load_settings(paths.settings))
+    with db.connect(paths.db) as conn:
+        try:
+            with conn:
+                if args.sent:
+                    outcomes.followup_sent(conn, args.sent)
+                    print(f"Recorded a follow-up for job {args.sent}. (JobPilot didn't send anything.)")
+                    return 0
+                if args.mute:
+                    outcomes.mute(conn, args.mute)
+                    print(f"No more reminders for job {args.mute}.")
+                    return 0
+        except GateError as exc:
+            print(exc, file=sys.stderr)
+            return 1
+        due = outcomes.due(conn, rules)
+    if not due:
+        print("Nothing to follow up on right now.")
+        return 0
+    profile = load_profile(paths.profile)
+    for d in due:
+        what = {"thank_you": "thank-you note", "quiet": "quiet a long time", "followup": f"follow-up {d.followups + 1}"}[d.kind]
+        print(f"{d.job_id:>6}  {what:<18}  {d.days:>3} days quiet  {d.company[:20]:<20}  {d.title[:44]}")
+        if args.drafts and d.kind != "quiet":
+            subj, body = outcomes.draft(d.kind, d.title, d.company, d.submitted, profile)
+            print(f"\n  DRAFT  Subject: {subj}\n" + "\n".join("  " + ln for ln in body.splitlines()) + "\n")
+    print("\nJobPilot never sends these. Send it yourself, then `jobpilot followups --sent ID`."
+          + ("" if args.drafts else " Add --drafts to see the drafts."))
+    return 0
+
+
+def cmd_stats(args) -> int:
+    from jobpilot.review import outcomes
+
+    paths = get_paths(args.home)
+    with db.connect(paths.db) as conn:
+        with conn:
+            outcomes.ensure(conn)
+        st = outcomes.stats(conn)
+    o = st["overall"]
+    if not o.applied:
+        print("No submitted applications yet.")
+        return 0
+    print(f"{o.applied} applications: {o.pct(o.responded)}% heard back, {o.pct(o.interviews)}% interviews, "
+          f"{o.pct(o.offers)}% offers.")
+    if st["median_days_to_reply"] is not None:
+        print(f"Replies usually came after {st['median_days_to_reply']} days.")
+    if o.applied < 10:
+        print("(Small numbers so far; rates get meaningful after a few dozen.)")
+    for group, rates in st["groups"].items():
+        print(f"\n{group}:")
+        for r in rates:
+            print(f"  {r.group:<16} {r.applied:>4} applied  {r.pct(r.responded):>3}% heard back  "
+                  f"{r.pct(r.interviews):>3}% interview  {r.pct(r.offers):>3}% offer")
+    return 0
+
+
 def cmd_export(args) -> int:
     from jobpilot.review import export
 
@@ -830,6 +933,28 @@ def build_parser() -> argparse.ArgumentParser:
     qu.add_argument("--area")
     qu.add_argument("--limit", type=int, default=30)
     qu.set_defaults(func=cmd_qualify)
+
+    ap = sub.add_parser("applied", help="your submitted applications and their stages")
+    ap.set_defaults(func=cmd_applied)
+
+    oc = sub.add_parser("outcome", help="record what happened with an application (only you set this)")
+    oc.add_argument("id", type=int)
+    oc.add_argument("stage", choices=["waiting", "screen", "assessment", "interview", "final", "offer", "accepted",
+                                      "declined", "rejected", "withdrawn", "no_response"])
+    oc.add_argument("--note")
+    oc.add_argument("--on", help="date it happened, YYYY-MM-DD (default today)")
+    oc.add_argument("--next", help="date of the next step, YYYY-MM-DD ('' to clear)")
+    oc.add_argument("--next-note", help="what the next step is")
+    oc.set_defaults(func=cmd_outcome)
+
+    fu = sub.add_parser("followups", help="follow-ups due, with drafts you send yourself")
+    fu.add_argument("--drafts", action="store_true", help="print the draft messages")
+    fu.add_argument("--sent", type=int, metavar="ID", help="record that you sent a follow-up")
+    fu.add_argument("--mute", type=int, metavar="ID", help="stop reminders for this application")
+    fu.set_defaults(func=cmd_followups)
+
+    stt = sub.add_parser("stats", help="response, interview and offer rates, and what's working")
+    stt.set_defaults(func=cmd_stats)
 
     tl = sub.add_parser("tailor", help="suggest a resume version reordered for one job (you approve the diff)")
     tl.add_argument("id", type=int)

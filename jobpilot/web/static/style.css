@@ -253,3 +253,11 @@ form.settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(38
 form.settings .card { margin: 0; }
 form.settings > :not(.card) { grid-column: 1 / -1; }
 form.settings > .btns { position: sticky; bottom: 0; background: var(--bg); padding: 8px 0; margin: 0; }
+
+/* applied: follow-up drafts */
+details.followup { border-top: 1px solid var(--line); padding: 8px 0; }
+details.followup:first-of-type { border-top: 0; }
+details.followup > summary { cursor: pointer; display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+.draft-mail { margin: 8px 0 4px; }
+.draft-mail textarea { margin-top: 4px; font-size: .88rem; }
+table.applied select { max-width: 190px; }

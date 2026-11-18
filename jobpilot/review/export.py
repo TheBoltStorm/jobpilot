@@ -11,10 +11,12 @@ import json
 import sqlite3
 from pathlib import Path
 
+from jobpilot.review.outcomes import BY_KEY
 from jobpilot.review.status import LABELS
 
 COLUMNS = ["job_id", "company", "title", "location", "status", "score", "posting_url", "ats", "resume",
-           "questions_left_for_you", "date_found", "approved_at", "filled_at", "submitted_at", "rejected_at", "notes"]
+           "questions_left_for_you", "date_found", "approved_at", "filled_at", "submitted_at", "rejected_at",
+           "outcome", "outcome_since", "first_reply_at", "follow_ups", "next_step", "notes"]
 
 TRACKED = ("ready_to_fill", "needs_human", "account_wall", "custom_site", "approved", "filled", "submitted", "rejected")
 
@@ -22,8 +24,9 @@ TRACKED = ("ready_to_fill", "needs_human", "account_wall", "custom_site", "appro
 def log_rows(conn: sqlite3.Connection) -> list[list]:
     rows = conn.execute(
         f"""SELECT j.*, m.score, a.resume_label, a.fields_json, a.approved_at, a.filled_at, a.submitted_at,
-                   a.rejected_at, a.notes
+                   a.rejected_at, a.notes, o.stage, o.stage_at, o.responded_at, o.followups, o.next_at, o.next_note
             FROM jobs j LEFT JOIN matches m ON m.job_id = j.id LEFT JOIN applications a ON a.job_id = j.id
+            LEFT JOIN outcomes o ON o.job_id = j.id
             WHERE a.job_id IS NOT NULL OR j.status IN ({','.join('?' * len(TRACKED))})
             ORDER BY COALESCE(a.submitted_at, a.approved_at, j.date_found) DESC""", TRACKED).fetchall()
     out = []
@@ -33,7 +36,9 @@ def log_rows(conn: sqlite3.Connection) -> list[list]:
         out.append([r["id"], r["company"], r["title"], r["location"], LABELS.get(r["status"], r["status"]),
                     r["score"] if r["score"] is not None else "", r["url"], r["ats"], r["resume_label"] or "", left,
                     r["date_found"][:10], r["approved_at"] or "", r["filled_at"] or "", r["submitted_at"] or "",
-                    r["rejected_at"] or "", r["notes"] or ""])
+                    r["rejected_at"] or "", BY_KEY[r["stage"]].label if r["stage"] in BY_KEY else "",
+                    r["stage_at"] or "", r["responded_at"] or "", r["followups"] if r["stage"] else "",
+                    f"{r['next_at']} {r['next_note']}".strip() if r["next_at"] else "", r["notes"] or ""])
     return out
 
 

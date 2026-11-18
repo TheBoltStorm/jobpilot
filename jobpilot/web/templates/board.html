@@ -14,8 +14,10 @@
     <span class="l">you meet the minimums for</span></a>
   <a href="/qualify?show=close"><span class="n">{{ qual_counts.get('close', 0) }}</span>
     <span class="l">one requirement short</span></a>
-  <a href="/jobs?status=submitted"><span class="n">{{ counts.get('submitted', 0) }}</span>
-    <span class="l">submitted</span></a>
+  <a href="/applied#due"><span class="n{{ ' warn-text' if due_n else '' }}">{{ due_n }}</span>
+    <span class="l">follow-ups to send</span></a>
+  <a href="/applied"><span class="n">{{ counts.get('submitted', 0) }}</span>
+    <span class="l">applied · {{ responded }} heard back</span></a>
 </div>
 
 <ol class="buckets" aria-label="Jobs by status">
