@@ -19,7 +19,7 @@ from typing import Callable
 from jobpilot.core.protected import protected_category
 from jobpilot.forms.greenhouse import FormQuestion
 from jobpilot.onboarding.profile import Profile
-from jobpilot.review.drafts import draft_answer, is_open_ended
+from jobpilot.review.drafts import draft_answer, fill_template, is_open_ended, is_template
 
 # The only keys a question can map to. Order matters for the label rules below.
 PROFILE_KEYS: dict[str, str] = {
@@ -203,6 +203,11 @@ def plan_from_form(questions: list[FormQuestion], profile: Profile, resume_label
         sa = short_answer_for(q.label, profile.short_answers)
         if sa:
             f.maps_to = f"short:{sa[0]}"
+            if not q.options and is_template(sa[1]):
+                f.value, f.state = fill_template(sa[1], job, skills), DRAFT
+                f.source = f"your template short_answers['{sa[0]}'], filled in for this job. Check it."
+                out.append(f)
+                continue
             value = fit_option(sa[1], q.options) if q.options else sa[1]
             if value:
                 f.value, f.state, f.source = value, FILLED, f"profile: short_answers['{sa[0]}']"

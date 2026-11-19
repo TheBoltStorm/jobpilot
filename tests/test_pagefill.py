@@ -122,7 +122,7 @@ def test_sign_in_pages_are_refused(conn):
 
 
 def test_extension_never_submits():
-    for name in ("page.js", "popup.js"):
+    for name in ("page.js", "popup.js", "background.js"):
         src = (ROOT / "extension" / name).read_text(encoding="utf-8")
         assert ".submit(" not in src and "requestSubmit" not in src and "KeyboardEvent" not in src
         assert "type=submit" not in src.replace(" ", "")
@@ -153,6 +153,9 @@ def test_api_needs_the_key_and_refuses_websites(paths):
     r = client.post("/api/ext/job", headers=ext, json={"url": URL, "title": "Data Intern", "company": "Example Co",
                                                       "description": "Python and SQL"})
     assert r.status_code == 200 and r.json()["new"] and r.json()["path"].startswith("/jobs/")
+    r = client.post("/api/ext/status", headers=ext, json={"url": URL})
+    assert r.json()["job"]["title"] == "Data Intern"
+    assert client.post("/api/ext/status", json={"url": URL}).status_code == 401
     r = client.post("/api/ext/filled", headers=ext, json={"url": URL, "filled": 3, "left": 2})
     assert r.json()["job_id"] == int(r.json()["job_id"])
 

@@ -73,6 +73,14 @@
     return txt(first.name);
   }
 
+  // Something is already in this field (you typed it, or JobPilot filled it on an earlier pass).
+  function present(el) {
+    if (el.dataset.jobpilotFilled) return true;
+    if (el.tagName === "SELECT") return el.multiple ? el.selectedOptions.length > 0 : (el.selectedIndex > 0 && el.value !== "");
+    if (el.type === "file") return !!(el.files && el.files.length);
+    return txt(el.value) !== "";
+  }
+
   function scan() {
     const fields = [];
     const groups = new Map();
@@ -99,7 +107,7 @@
       const options = el.tagName === "SELECT"
         ? [...el.options].filter((o) => o.value !== "" && !o.disabled).map((o) => txt(o.text)) : [];
       fields.push({ key, kind, label: labelText(el), name: el.name || "", id: el.id || "",
-        required: el.required || el.getAttribute("aria-required") === "true", options });
+        required: el.required || el.getAttribute("aria-required") === "true", options, present: present(el) });
     }
     for (const g of groups.values()) {
       const shown = g.inputs.filter((i) => visible(i) || (i.labels && [...i.labels].some(visible)));
@@ -109,7 +117,8 @@
       const kind = g.type === "radio" ? "radio" : (g.inputs.length > 1 ? "multi_select" : "checkbox");
       const options = kind === "checkbox" ? [] : g.inputs.map(optionLabel);
       const label = kind === "checkbox" ? labelText(g.inputs[0]) : groupLabel(g.inputs, options);
-      fields.push({ key, kind, label, name: g.name, id: "", required: g.inputs.some((i) => i.required), options });
+      fields.push({ key, kind, label, name: g.name, id: "", required: g.inputs.some((i) => i.required), options,
+        present: g.inputs.some((i) => i.checked) });
     }
     return { url: location.href, title: document.title, hasPassword, fields };
   }
@@ -162,6 +171,7 @@
           setValue(el, a.value);
           mark(el, true);
         }
+        els.forEach((x) => { x.dataset.jobpilotFilled = "1"; });
         res.filled++;
       } catch (e) {
         res.failed.push(a.key);

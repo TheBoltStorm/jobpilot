@@ -30,6 +30,12 @@ from jobpilot.autofill.lever import LeverFiller  # noqa: E402
 FILLERS = {"greenhouse": GreenhouseFiller, "lever": LeverFiller}
 
 
+def uses_form_filler(job) -> bool:
+    """Greenhouse/Lever jobs with their real form loaded use the dedicated fillers; everything else
+    (other sites, or a form JobPilot couldn't load) is read and filled on the page itself."""
+    return job["ats"] in FILLERS
+
+
 def default_channel() -> str:
     return "msedge" if sys.platform == "win32" else "chrome"
 
@@ -51,13 +57,21 @@ def plan_run(conn, job_id: int, mode: str, profile=None) -> tuple[dict, str, lis
         job = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
     if not job:
         raise GateError(f"no job {job_id}")
-    if job["ats"] not in FILLERS:
-        raise GateError(f"autofill doesn't handle {job['ats'] or 'this site'} yet; apply on the site yourself")
+    app = load_application(conn, job_id)
+    status = job["status"]
+    if not uses_form_filler(job):
+        url = job["apply_url"] or job["url"]
+        if not url.startswith(("http://", "https://")):
+            raise GateError("this job has no web link to open")
+        if mode == "fill":
+            if status not in ("approved", "filled") or not (app and app.approved_snapshot):
+                raise GateError("fill mode only runs for jobs you approved. Review and approve it in the dashboard first.")
+        elif not app:
+            raise GateError("open the job's review page once before a dry run")
+        return dict(job), url, [], None
     form = load_form(conn, job_id)
     if not form:
         raise GateError(f"load the real form first: `jobpilot forms fetch {job_id}` (or the button on its review page)")
-    app = load_application(conn, job_id)
-    status = job["status"]
     if mode == "fill":
         if status not in ("approved", "filled") or not (app and app.approved_snapshot):
             raise GateError("fill mode only runs for jobs you approved. Review and approve it in the dashboard first.")
@@ -103,6 +117,20 @@ def record(conn, job_id: int, mode: str, started: str, result: FillResult) -> in
     return cur.lastrowid
 
 
+def record_page(conn, job_id: int, result: FillResult) -> None:
+    """A later page of a multi-page form was filled while the window stayed open."""
+    filled = result.count("filled")
+    if not filled:
+        return
+    log_event(conn, job_id, "system", "autofill: filled another page",
+              note=f"{filled} filled, {result.count('left_for_you')} left for you")
+    job = conn.execute("SELECT status FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    if job["status"] == "approved":
+        transition(conn, job_id, "filled", actor="system", action="form filled",
+                   note="left open for you to check and submit")
+        conn.execute("UPDATE applications SET filled_at = ? WHERE job_id = ?", (now_iso(), job_id))
+
+
 def run_autofill(paths: Paths, job_id: int, mode: str = "dry_run", *, profile=None, channel: str | None = None,
                  headless: bool = False, wait_for_close: bool = True, slow_mo_ms: int = 0,
                  setup_context: Callable | None = None, log: Callable[[str], None] = print) -> FillResult:
@@ -135,6 +163,10 @@ def run_autofill(paths: Paths, job_id: int, mode: str = "dry_run", *, profile=No
             page = ctx.pages[0] if ctx.pages else ctx.new_page()
             log(f"Opening {form_url}")
             page.goto(form_url, wait_until="domcontentloaded")
+            if not uses_form_filler(job):
+                result = _run_generic(paths, job, mode, profile, ctx, page, started, headless, wait_for_close, log,
+                                      guard_on)
+                return result
             try:
                 page.wait_for_selector("#first_name, input[type=password], #application-form", timeout=20000)
             except Exception:
@@ -164,6 +196,44 @@ def run_autofill(paths: Paths, job_id: int, mode: str = "dry_run", *, profile=No
                 ctx.close()
             except Exception:
                 pass
+    return result
+
+
+def _run_generic(paths: Paths, job: dict, mode: str, profile, ctx, page, started: str, headless: bool,
+                 wait_for_close: bool, log, guard_on: dict) -> FillResult:
+    from jobpilot.autofill.generic import GenericFiller
+    from jobpilot.onboarding.profile import load_profile
+    from jobpilot.review.pagefill import plan_page
+
+    profile = profile or load_profile(paths.profile)
+    if profile is None:
+        raise GateError("no profile yet: run `jobpilot onboard` first")
+
+    def planner(url: str, title: str, fields: list[dict]) -> dict:
+        with db.connect(paths.db) as conn:
+            return plan_page(conn, profile, url, title, fields, job_id=job["id"])
+
+    try:
+        page.wait_for_load_state("load", timeout=15000)
+    except Exception:
+        pass
+    filler = GenericFiller(planner, dry_run=(mode == "dry_run"))
+    result = filler.fill_page(page)
+    with db.connect(paths.db) as conn:
+        with conn:
+            record(conn, job["id"], mode, started, result)
+    _summary(result, mode, log)
+    guard_on["on"] = False  # the form is yours: JobPilot only types into fields from here on, never clicks
+    if mode == "fill" and wait_for_close and not headless:
+        log("The browser stays open. JobPilot fills each new page of the form as it appears; it never clicks "
+            "Next or Submit. Close the window when you're done.")
+
+        def on_page(res: FillResult) -> None:
+            with db.connect(paths.db) as conn:
+                with conn:
+                    record_page(conn, job["id"], res)
+
+        filler.watch(ctx, on_page)
     return result
 
 

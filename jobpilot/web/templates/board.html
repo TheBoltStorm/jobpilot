@@ -35,7 +35,7 @@
 
 <div class="grid2">
   <section class="card">
-    <div class="card-head"><h2>Your next steps</h2>{% if queue %}<a class="btn primary small-btn" href="/review">Start reviewing</a>{% endif %}</div>
+    <div class="card-head"><h2>Your next steps</h2>{% if sort_n %}<a class="btn small-btn" href="/triage">Sort {{ sort_n }} quickly</a>{% endif %}{% if queue %}<a class="btn primary small-btn" href="/review">Start reviewing</a>{% endif %}</div>
     {% if to_submit or queue or due %}
     <ul class="list">
       {% for r in to_submit %}

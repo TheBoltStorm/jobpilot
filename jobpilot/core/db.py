@@ -208,6 +208,23 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX outcomes_stage ON outcomes(stage);
     """,
+    # v9: people you know at a company (referrals). You contact them yourself.
+    """
+    CREATE TABLE contacts (
+        id          INTEGER PRIMARY KEY,
+        company_key TEXT NOT NULL,
+        company     TEXT NOT NULL,
+        name        TEXT NOT NULL,
+        role        TEXT NOT NULL DEFAULT '',
+        link        TEXT NOT NULL DEFAULT '',   -- LinkedIn profile, email address, ...
+        note        TEXT NOT NULL DEFAULT '',
+        status      TEXT NOT NULL DEFAULT 'to_ask',
+        asked_at    TEXT,
+        job_id      INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
+        added_at    TEXT NOT NULL
+    );
+    CREATE INDEX contacts_company ON contacts(company_key);
+    """,
 ]
 
 

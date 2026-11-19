@@ -807,6 +807,17 @@ def cmd_export(args) -> int:
     return 0
 
 
+def cmd_backup(args) -> int:
+    from jobpilot.backup import default_name, make_backup
+
+    paths = get_paths(args.home)
+    out = Path(args.path or default_name())
+    n = make_backup(paths, out)
+    print(f"Wrote {n} files to {out}. Keep it somewhere safe: it has your profile and applications.")
+    print("Not included: the browser sign-ins, the browser-button key, and .env (API keys).")
+    return 0
+
+
 def cmd_sample(args) -> int:
     from jobpilot.samples import write_sample_docx, write_sample_pdf
 
@@ -1004,6 +1015,10 @@ def build_parser() -> argparse.ArgumentParser:
     ex = sub.add_parser("export", help="export the applications log (.csv or .xlsx)")
     ex.add_argument("path", help="e.g. applications.xlsx")
     ex.set_defaults(func=cmd_export)
+
+    bk = sub.add_parser("backup", help="save your data (database, profile, settings, resumes) to one zip file")
+    bk.add_argument("path", nargs="?", help="where to write it (default: jobpilot-backup-DATE.zip)")
+    bk.set_defaults(func=cmd_backup)
 
     s = sub.add_parser("sample-resume", help="write a made-up resume to try JobPilot with")
     s.add_argument("--out", default="samples")

@@ -33,6 +33,7 @@ async function connect() {
     const hi = await api("/api/ext/hello");
     $("#status").textContent = hi.profile ? "connected" : "connected · no profile yet";
     show("#setup", false); show("#main");
+    if (hi.profile && tab && /^https?:/.test(tab.url || "")) $("#scan").click(); // read the form right away
   } catch (e) {
     $("#status").textContent = "not connected";
     show("#main", false); show("#setup");
@@ -42,6 +43,7 @@ async function connect() {
 }
 
 function tagFor(f) {
+  if (f.present) return "already filled";
   if (!f.value) return f.protected ? "only you" : "for you";
   return f.draft ? "DRAFT" : f.state === "human" ? "your answer" : "profile";
 }
@@ -52,7 +54,7 @@ function renderPlan() {
   let fillable = 0;
   for (const f of plan.fields) {
     const li = document.createElement("li");
-    if (!f.value) li.className = "need";
+    if (!f.value && !f.present) li.className = "need";
     const box = document.createElement("input");
     box.type = "checkbox"; box.checked = f.fill; box.disabled = !f.can_fill; box.dataset.key = f.key;
     box.addEventListener("change", updateFillButton);
@@ -64,10 +66,11 @@ function renderPlan() {
     q.append(label, v); li.append(box, q); list.append(li);
     if (f.can_fill) fillable++;
   }
-  const left = plan.fields.filter((f) => !f.value && !f.optional).length;
+  const left = plan.fields.filter((f) => !f.value && !f.optional && !f.present).length;
   $("#plan-head").textContent = (plan.job ? `${plan.job.title} at ${plan.job.company}. ` : "") +
     `${fillable} fields JobPilot can fill, ${left} only you can answer. DRAFT answers are unticked: tick them only after reading.`;
   show("#plan"); updateFillButton();
+  if (!$("#fill").disabled) $("#fill").focus(); // Enter fills the ticked fields
 }
 
 function updateFillButton() {
@@ -104,7 +107,7 @@ $("#fill").addEventListener("click", async () => {
     if (!byFrame.has(frameId)) byFrame.set(frameId, { answers: [], left: [] });
     const fr = byFrame.get(frameId);
     if (ticked.has(f.key) && f.can_fill) fr.answers.push({ key, value: f.value, kind: f.kind });
-    else if (!f.optional) fr.left.push(key);
+    else if (!f.optional && !f.present) fr.left.push(key);
   }
   let filled = 0, left = 0, failed = 0;
   for (const [frameId, fr] of byFrame) {

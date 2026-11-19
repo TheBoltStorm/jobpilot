@@ -7,6 +7,9 @@
   <span class="right">
     {% if fillable %}<form method="post" action="/apply/fill-all"><input type="hidden" name="csrf" value="{{ csrf }}">
       <button class="btn small-btn" {% if filling %}disabled title="Already filling"{% endif %}>Fill all {{ fillable }} approved, one by one</button></form>{% endif %}
+    {% if total %}<form method="post" action="/apply/check-open"><input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn small-btn" {% if checking %}disabled{% endif %} title="Looks up each posting, politely, and moves closed ones out of your way">{{ 'Checking…' if checking else 'Check which are still open' }}</button></form>{% endif %}
+    {% if sort_n %}<a class="btn small-btn" href="/triage" title="One card at a time: Y keep, L later, N pass">Sort {{ sort_n }} quickly</a>{% endif %}
     {% if total %}<a class="btn primary small-btn" href="/review">Review the next one</a>{% endif %}
   </span>
 </div>
@@ -18,6 +21,14 @@
   <li><b>You submit.</b> Check the form and click Submit on the site yourself.</li>
 </ol>
 
+{% if shared %}
+<section class="card callout">
+  <p><b>Answer once, apply to many.</b> {{ shared|length }} question{{ 's' if shared|length != 1 }} come{{ 's' if shared|length == 1 }} up in several waiting
+    applications{% if shared[0] %}, like “{{ shared[0].label|truncate(70) }}” ({{ shared[0].count }} jobs){% endif %}.
+    <a class="btn small-btn primary" href="/answers">Answer them once</a></p>
+</section>
+{% endif %}
+
 {% for title, hint, rows in groups if rows %}
 <section class="card">
   <div class="card-head"><h2>{{ title }} <span class="muted">{{ rows|length }}</span></h2><span class="muted small">{{ hint }}</span></div>
@@ -25,6 +36,9 @@
     {% for r in rows %}
     <li><span class="score sc-{{ (r.score or 0) // 25 }}">{{ r.score if r.score is not none else '–' }}</span>
       <span class="grow clip"><a href="/jobs/{{ r.id }}">{{ r.title }}</a> <span class="muted">· {{ r.company }}</span></span>
+      {% if r.id in new_ids %}<span class="badge now">New</span>{% endif %}
+      {% if r.id in before %}<span class="badge warn" title="You already applied to this role at this company">applied before</span>{% endif %}
+      {% if r.kept %}<span class="tag">kept</span>{% endif %}
       {% if r.skipped_at %}<span class="tag">skipped</span>{% endif %}
       <span class="pill s-{{ r.status }}">{{ r.status|label }}</span>
       <a class="btn small-btn" href="/jobs/{{ r.id }}">{{ 'Open' if r.status in ('approved', 'filled') else 'Review' }}</a></li>

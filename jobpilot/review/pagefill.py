@@ -68,12 +68,20 @@ def questions_from_page(fields: list[dict]) -> list[FormQuestion]:
     return out
 
 
-def plan_page(conn: sqlite3.Connection, profile: Profile, url: str, title: str, fields: list[dict]) -> dict:
-    """What the browser button may fill on this page. Pure planning: nothing is stored."""
+def plan_page(conn: sqlite3.Connection, profile: Profile, url: str, title: str, fields: list[dict],
+              job_id: int | None = None) -> dict:
+    """What may be filled on this page. Pure planning: nothing is stored.
+
+    Fields that already have something in them are marked `present` and never filled again.
+    `job_id` ties the page to a job you're filling from the dashboard (its URL may have moved on).
+    """
     if any(str(f.get("kind")) == "password" for f in fields):
         return {"refused": SIGN_IN, "job": None, "fields": []}
     questions = questions_from_page(fields)
-    job = find_job(conn, url) if url else None
+    if job_id is not None:
+        job = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    else:
+        job = find_job(conn, url) if url else None
     skills: list[dict] = []
     human: dict[str, str] = {}
     if job:
@@ -85,7 +93,7 @@ def plan_page(conn: sqlite3.Connection, profile: Profile, url: str, title: str, 
     ctx = dict(job) if job else {"title": _clean(title, 200) or "this role", "company": ""}
     planned = plan_from_form(questions, profile, default_resume_label(conn, profile), ctx, skills)
     out = []
-    for q, f in zip(questions, planned):
+    for raw, q, f in zip(fields, questions, planned):
         value, state, source = f.value, f.state, f.source
         mine = human.get(_norm(q.label))
         if mine and (not q.options or all(v in q.options for v in mine.split("; "))):
@@ -99,10 +107,13 @@ def plan_page(conn: sqlite3.Connection, profile: Profile, url: str, title: str, 
             elif f.protected:
                 source = ("legal or consent question: you tick or answer it yourself" if f.protected in NEVER_AUTOFILL
                           else "only you can answer this (answer it on this job's page in JobPilot to reuse it)")
+        here = bool(raw.get("present"))
+        if here:
+            source = "already filled on the page; left as it is"
         out.append({"key": q.key, "label": q.label, "kind": q.kind, "value": value, "source": source,
                     "state": state if value else "needs_human", "protected": f.protected,
-                    "can_fill": bool(value), "fill": bool(value) and state in (FILLED, HUMAN),
-                    "draft": bool(value) and state == DRAFT, "optional": not q.required})
+                    "can_fill": bool(value), "fill": bool(value) and state in (FILLED, HUMAN) and not here,
+                    "draft": bool(value) and state == DRAFT, "optional": not q.required, "present": here})
     jinfo = {"id": job["id"], "title": job["title"], "company": job["company"], "status": job["status"]} if job else None
     return {"refused": "", "job": jinfo, "fields": out}
 

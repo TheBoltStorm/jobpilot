@@ -73,3 +73,26 @@ def draft_answer(label: str, job, skills: list[dict]) -> tuple[str, str] | None:
     note = (f"Drafted from the posting's skills ({', '.join(names)}) and your profile ({'; '.join(sources)}). "
             "Make it yours before approving.")
     return text, note
+
+
+# ---- your own templates
+
+PLACEHOLDER = re.compile(r"\{(company|title|skills)\}")
+
+
+def is_template(text: str) -> bool:
+    return bool(PLACEHOLDER.search(text or ""))
+
+
+def fill_template(text: str, job, skills: list[dict]) -> str:
+    """Your saved answer with {company}, {title} and {skills} filled in for this job.
+
+    {skills} is the posting's skills you have (required/preferred first). If there are none,
+    it's left as "{skills}" so you notice and fix it before approving.
+    """
+    have = [s["name"] for s in skills if s.get("status") == "have" and s.get("importance") in ("required", "preferred")]
+    names = list(dict.fromkeys(have))[:3]
+    values = {"company": (job["company"] if job else "") or "{company}",
+              "title": (job["title"] if job else "") or "{title}",
+              "skills": _join(names) if names else "{skills}"}
+    return PLACEHOLDER.sub(lambda m: values[m.group(1)], text)

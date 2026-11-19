@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Answer once{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Answer once</h1>
+  <span class="sub">Questions that come up in more than one waiting application. Answer once, and every job you tick gets it.</span>
+  <span class="right"><a class="btn small-btn" href="/apply">Back to Apply</a></span>
+</div>
+
+{% for q in questions %}
+<section class="card answer-once" id="q-{{ q.gid }}">
+  <form method="post" action="/answers">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="gid" value="{{ q.gid }}">
+    <div class="card-head">
+      <h2>{{ q.label }}</h2>
+      <span class="muted small">{{ q.count }} jobs</span>
+    </div>
+    {% if q.protected %}
+    <p class="small warn-text">Only you can answer this. Every job starts unticked: tick only the jobs your answer is true for.</p>
+    {% endif %}
+    <div class="ao-row">
+      {% if q.options and q.kind == 'multi_select' %}
+        <span class="ao-opts">{% for o in q.options %}<label class="pick-opt"><input type="checkbox" name="value" value="{{ o }}"> {{ o }}</label>{% endfor %}</span>
+      {% elif q.options %}
+        <select name="value" required><option value="">Pick one…</option>{% for o in q.options %}<option>{{ o }}</option>{% endfor %}</select>
+      {% elif q.kind == 'textarea' %}
+        <textarea name="value" rows="3" required></textarea>
+      {% else %}
+        <input name="value" required>
+      {% endif %}
+      <button class="btn primary">Use for ticked jobs</button>
+    </div>
+    {% if q.rememberable and not q.protected %}
+    <label class="remember"><input type="checkbox" name="remember"> Remember for future applications too</label>
+    {% endif %}
+    <details class="ao-jobs" {% if q.protected %}open{% endif %}>
+      <summary class="small">Which jobs</summary>
+      <span class="btns"><button type="button" class="btn small-btn" data-tick="all">Tick all</button>
+        <button type="button" class="btn small-btn" data-tick="none">Tick none</button></span>
+      <ul class="list">
+        {% for s in q.spots %}
+        <li><label class="grow clip"><input type="checkbox" name="job" value="{{ s.job_id }}" {% if not q.protected %}checked{% endif %}>
+          {{ s.title }} <span class="muted">· {{ s.company }}</span></label>
+          <a class="small" href="/jobs/{{ s.job_id }}">open</a></li>
+        {% endfor %}
+      </ul>
+    </details>
+  </form>
+</section>
+{% else %}
+<section class="card"><p class="muted">No question is waiting in more than one application. <a href="/apply">Back to Apply</a>.</p></section>
+{% endfor %}
+<p class="muted small">Legal and consent questions and file uploads don't show here: you handle those on each form.</p>
+{% endblock %}

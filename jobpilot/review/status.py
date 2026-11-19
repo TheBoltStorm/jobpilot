@@ -28,7 +28,7 @@ STATUSES: tuple[Status, ...] = (
     Status("ready_to_fill", "Ready to fill", "Every field has an answer; waiting for your approval"),
     Status("needs_human", "Needs human", "Some questions only you can answer"),
     Status("account_wall", "Account wall", "The site wants you to sign in or make an account first"),
-    Status("custom_site", "Custom site", "Not a Greenhouse/Lever/Ashby form; apply on the site yourself"),
+    Status("custom_site", "Custom site", "Its questions are read from the form when JobPilot opens it"),
     Status("posting_closed", "Posting closed", "No longer listed by its source"),
     Status("approved", "Approved", "You approved it; autofill may fill the form (it never submits)"),
     Status("filled", "Filled", "Form filled and left open on the last page for you to submit"),

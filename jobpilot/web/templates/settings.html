@@ -13,7 +13,9 @@
     <label class="row">Skip postings older than <input type="number" name="max_age_days" value="{{ s.max_age_days }}" min="1" class="w4"> days</label>
     <label class="row">Count a job as a match from a score of <input type="number" name="min_score" value="{{ s.matching.min_score }}" min="0" max="100" class="w4"> (out of 100)</label>
     <label class="row">Daily goal: <input type="number" name="daily_goal" value="{{ s.daily_goal }}" min="1" max="200" class="w4"> applications a day</label>
-    <p class="small"><a href="/resumes">Resume versions and saved answers →</a></p>
+    <p class="small"><a href="/resumes">Resume versions and saved answers →</a> · <a href="/people">People (referrals) →</a></p>
+    <p class="small"><a href="/backup.zip">Download a backup</a> <span class="muted">— your database, profile, settings and resumes in one zip.
+      Browser sign-ins, the browser-button key and API keys are left out.</span></p>
     <p class="muted small">Your profile (name, education, skills, target fields, locations) lives in
       <code>profile.yaml</code>. Change it with <code>jobpilot profile edit</code> or re-run <code>jobpilot onboard</code>.</p>
   </section>

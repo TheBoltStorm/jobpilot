@@ -239,18 +239,30 @@ def _score_band(score) -> str:
     return "75+" if score >= 75 else "60-74" if score >= 60 else "under 60"
 
 
+def _timing(posted: str | None, found: str | None, submitted: str | None) -> str:
+    """How soon after the posting went up you applied."""
+    start, sub = _day(posted) or _day(found), _day(submitted)
+    if not start or not sub:
+        return "unknown"
+    d = (sub - start).days
+    return ("same or next day" if d <= 1 else "2-3 days" if d <= 3 else "4-7 days" if d <= 7
+            else "8-14 days" if d <= 14 else "15+ days")
+
+
 def stats(conn: sqlite3.Connection) -> dict:
     """Rates overall and by source, ATS, field, score, resume and qualify verdict."""
     ensure(conn)
     rows = conn.execute(
         """SELECT o.stage, o.responded_at, o.stage_at, o.followups, a.submitted_at, a.resume_label, j.ats, m.score, m.tags,
-                  q.status AS qual,
+                  q.status AS qual, j.date_posted, j.date_found,
+                  EXISTS (SELECT 1 FROM contacts c WHERE c.company_key = j.company_key AND c.status = 'referred') AS referred,
                   (SELECT source FROM job_sources s WHERE s.job_id = j.id ORDER BY s.first_seen LIMIT 1) AS source
            FROM outcomes o JOIN jobs j ON j.id = o.job_id LEFT JOIN applications a ON a.job_id = j.id
            LEFT JOIN matches m ON m.job_id = j.id LEFT JOIN qualifications q ON q.job_id = j.id""").fetchall()
     overall = Rate("All applications")
     groups: dict[str, dict[str, Rate]] = {k: {} for k in
-                                          ("Source", "Site", "Field", "Match score", "Resume", "Minimums")}
+                                          ("Source", "Site", "Field", "Match score", "Resume", "Minimums",
+                                           "Applied after posting", "Referral")}
     waits: list[int] = []
     for r in rows:
         resp = bool(BY_KEY.get(r["stage"]) and BY_KEY[r["stage"]].responded) or bool(r["responded_at"])
@@ -263,6 +275,8 @@ def stats(conn: sqlite3.Connection) -> dict:
             "Match score": _score_band(r["score"]),
             "Resume": "tailored" if "-for-job-" in (r["resume_label"] or "") else "standard",
             "Minimums": {"qualify": "met all", "close": "one short", "not": "two+ short"}.get(r["qual"], "not checked"),
+            "Applied after posting": _timing(r["date_posted"], r["date_found"], r["submitted_at"]),
+            "Referral": "referred" if r["referred"] else "no referral",
         }
         for rate in [overall] + [groups[g].setdefault(v, Rate(v)) for g, v in keys.items()]:
             rate.applied += 1

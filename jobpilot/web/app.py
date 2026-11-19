@@ -27,7 +27,7 @@ from jobpilot.forms import FORM_ATS
 from jobpilot.core import db
 from jobpilot.onboarding.profile import load_profile
 from jobpilot.matching.skills import load_taxonomy
-from jobpilot.review import export, outcomes, pagefill, plan, tailor, tracker
+from jobpilot.review import bulk, contacts, export, fresh, outcomes, pagefill, plan, tailor, tracker, triage
 from jobpilot.review.status import LABELS, PRE_APPROVAL, STATUSES, GateError
 from jobpilot.settings import Settings, load_settings, save_settings
 
@@ -53,6 +53,13 @@ MESSAGES = {
     "tailor_discarded": "Discarded the tailored version.",
     "added": "Added. Check the answers below, then approve when they look right.",
     "already": "You already had this job. Here it is.",
+    "open_open": "Still open: the posting is up and taking applications.",
+    "open_closed": "This posting looks closed. Check the site before you spend time on it.",
+    "open_unknown": "Couldn't tell whether this posting is still open (the site didn't say).",
+    "checking": "Checking which postings are still open, politely, one at a time. Reload in a minute.",
+    "person_added": "Added. JobPilot drafts the referral ask on that company's jobs; you send it yourself.",
+    "answer_saved": "Saved. It fills in (or becomes a draft, if it has {company}/{title}/{skills}) on matching questions.",
+    "answered": "Answered. Each ticked application has your answer now; approve them when they look right.",
     "logged": "Logged as applied. It's on your Applications board now.",
     "remembered": "Saved. Your remembered answers fill in automatically on future applications.",
     "resume_added": "Added the resume version.",
@@ -73,6 +80,7 @@ def create_app(paths: Paths) -> FastAPI:
     app.state.csrf_token = token
     app.state.filling = set()  # job ids with a fill running in a browser window
     app.state.fill_errors = {}  # job id -> last error from a dashboard-started fill
+    app.state.checking = False  # a still-open check of every posting is running
     t_env = templates.env
     t_env.globals.update(STATUSES=STATUSES, LABELS=LABELS, csrf=token)
     # Bumps when the CSS/JS change, so browsers don't keep an old cached copy after an update.
@@ -234,7 +242,8 @@ def create_app(paths: Paths) -> FastAPI:
             today_n = tracker.applied_on(conn, today)
             week_n = tracker.applied_since(conn, today - timedelta(days=today.weekday()))
             streak = tracker.streak(conn, today)
-        return render(request, "board.html", due=due[:5], due_n=len(due), responded=responded, counts=counts,
+            sort_n = len(triage.to_sort(conn))
+        return render(request, "board.html", sort_n=sort_n, due=due[:5], due_n=len(due), responded=responded, counts=counts,
                       today_n=today_n, week_n=week_n, streak=streak, goal=settings().daily_goal,
                       total=sum(counts.values()), queue=queue, recent=recent, undescribed=undescribed,
                       qualify=qualify, qual_counts=qual_counts, to_submit=to_submit,
@@ -362,6 +371,18 @@ def create_app(paths: Paths) -> FastAPI:
 
             save_profile(profile, paths.profile)
             return go("/resumes#answers", "saved")
+        if action == "add_answer":
+            profile = profile_or_400()
+            q, a = str(form.get("question", "")).strip()[:200], str(form.get("answer", "")).strip()[:3000]
+            if not q or not a:
+                return go("/resumes?" + urlencode({"err": "Give both the question and your answer."}) + "#answers")
+            if not plan.remember_answers(profile, {q: a}) and profile.short_answers.get(q) != a:
+                return go("/resumes?" + urlencode({"err": "Only you can answer that kind of question (work authorization, "
+                                                          "sponsorship, salary, EEO...), so it can't be saved."}) + "#answers")
+            from jobpilot.onboarding.profile import save_profile
+
+            save_profile(profile, paths.profile)
+            return go("/resumes#answers", "answer_saved")
         upload = form.get("file")
         label = str(form.get("label", "")).strip()
         if not upload or not getattr(upload, "filename", "") or not label:
@@ -432,32 +453,41 @@ def create_app(paths: Paths) -> FastAPI:
 
     @app.post("/apply/fill-all")
     async def fill_all(request: Request):
-        """Fill every approved Greenhouse/Lever form, one browser window after another."""
+        """Fill every approved form, one browser window after another."""
         import threading
 
-        from jobpilot.autofill import FILLERS, run_autofill
+        from jobpilot.autofill import run_autofill
 
         await posted(request)
         with db.connect(paths.db) as conn:
             ids = [r[0] for r in conn.execute(
-                f"""SELECT j.id FROM jobs j LEFT JOIN matches m ON m.job_id = j.id
-                    WHERE j.status = 'approved' AND j.ats IN ({','.join('?' * len(FILLERS))})
-                    ORDER BY m.score DESC""", tuple(FILLERS))]
+                """SELECT j.id FROM jobs j LEFT JOIN matches m ON m.job_id = j.id
+                   WHERE j.status = 'approved' ORDER BY m.score DESC""")]
         ids = [i for i in ids if i not in app.state.filling]
         if not ids:
-            return go("/apply?" + urlencode({"err": "No approved Greenhouse or Lever forms waiting to be filled."}))
+            return go("/apply?" + urlencode({"err": "No approved forms waiting to be filled."}))
         s = settings()
         app.state.filling.update(ids)
 
         def work():
+            http = _http()
             for job_id in ids:
                 try:
+                    with db.connect(paths.db) as conn:
+                        jrow = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+                        state = fresh.still_open(http, jrow, _gh_tokens())
+                        with conn:
+                            fresh.record_check(conn, job_id, state)
+                    if state == "closed":
+                        app.state.fill_errors[job_id] = "Skipped: the posting looks closed."
+                        continue
                     run_autofill(paths, job_id, "fill", profile=load_profile(paths.profile),
                                  channel=s.autofill.browser_channel, slow_mo_ms=s.autofill.slow_mo_ms, log=lambda m: None)
                 except Exception as exc:
                     app.state.fill_errors[job_id] = str(exc).splitlines()[0][:300] if str(exc) else type(exc).__name__
                 finally:
                     app.state.filling.discard(job_id)
+            http.close()
 
         threading.Thread(target=work, daemon=True, name="fill-queue").start()
         return go("/apply", "filling_queue")
@@ -466,10 +496,16 @@ def create_app(paths: Paths) -> FastAPI:
     def apply_page(request: Request):
         with db.connect(paths.db) as conn:
             rows = conn.execute(
-                f"""SELECT j.id, j.title, j.company, j.status, j.ats, m.score, a.skipped_at FROM jobs j
+                f"""SELECT j.id, j.title, j.company, j.status, j.ats, j.date_posted, j.date_found, m.score, a.skipped_at,
+                           EXISTS (SELECT 1 FROM application_events e WHERE e.job_id = j.id AND e.action = 'kept') kept
+                    FROM jobs j
                     LEFT JOIN matches m ON m.job_id = j.id LEFT JOIN applications a ON a.job_id = j.id
                     WHERE j.status IN ({','.join('?' * len(plan.QUEUE_STATUSES))}, 'approved', 'filled')
-                    ORDER BY a.skipped_at IS NOT NULL, m.score DESC, j.id""", plan.QUEUE_STATUSES).fetchall()
+                    ORDER BY a.skipped_at IS NOT NULL, kept DESC, m.score DESC, j.id""", plan.QUEUE_STATUSES).fetchall()
+            shared = bulk.shared_questions(conn)
+            new_ids = {r["id"] for r in rows if fresh.is_new(r)}
+            before = {r["id"] for r in rows if fresh.applied_before(conn, r["id"])}
+            sort_n = len(triage.to_sort(conn))
         groups = [
             ("Fill and submit", "You approved these. Fill the form, check it, and click Submit on the site yourself.",
              [r for r in rows if r["status"] in ("approved", "filled")]),
@@ -478,9 +514,146 @@ def create_app(paths: Paths) -> FastAPI:
             ("Ready for your OK", "JobPilot has an answer for every question. Check them and approve.",
              [r for r in rows if r["status"] in ("ready_to_fill", "matched", "custom_site")]),
         ]
-        fillable = sum(1 for r in rows if r["status"] == "approved" and r["ats"] in FORM_ATS)
+        fillable = sum(1 for r in rows if r["status"] == "approved")
         return render(request, "apply.html", groups=groups, total=len(rows), fillable=fillable,
-                      filling=bool(app.state.filling))
+                      filling=bool(app.state.filling), shared=shared, new_ids=new_ids, before=before, sort_n=sort_n,
+                      checking=app.state.checking)
+
+    @app.post("/apply/check-open")
+    async def check_open_all(request: Request):
+        """Check every waiting or approved posting is still up, in the background (rate-limited)."""
+        import threading
+
+        await posted(request)
+        if app.state.checking:
+            return go("/apply", "checking")
+        with db.connect(paths.db) as conn:
+            ids = [r[0] for r in conn.execute(
+                f"""SELECT id FROM jobs WHERE status IN ({','.join('?' * len(plan.QUEUE_STATUSES))}, 'approved')
+                    ORDER BY id DESC LIMIT 200""", plan.QUEUE_STATUSES)]
+        app.state.checking = True
+
+        def work():
+            http = _http()
+            try:
+                for job_id in ids:
+                    with db.connect(paths.db) as conn:
+                        jrow = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+                        state = fresh.still_open(http, jrow, _gh_tokens())
+                        with conn:
+                            fresh.record_check(conn, job_id, state)
+            finally:
+                http.close()
+                app.state.checking = False
+
+        threading.Thread(target=work, daemon=True, name="check-open").start()
+        return go("/apply", "checking")
+
+    # ------------------------------------------------------------ sort jobs fast
+
+    @app.get("/triage", response_class=HTMLResponse)
+    def triage_page(request: Request):
+        from jobpilot.matching import minimums
+
+        with db.connect(paths.db) as conn:
+            rows = triage.to_sort(conn)
+            job = rows[0] if rows else None
+            ctx = {"job": job, "left": len(rows), "kept": triage.kept_count(conn)}
+            if job:
+                m = conn.execute("SELECT skills_json, reason FROM matches WHERE job_id = ?", (job["id"],)).fetchone()
+                skills = json.loads(m["skills_json"]).get("skills", []) if m else []
+                pick = lambda st: list(dict.fromkeys(s["name"] for s in skills if s["status"] == st  # noqa: E731
+                                                     and s["importance"] in ("required", "preferred")))[:6]
+                desc = " ".join((job["description"] or "").split())
+                ctx.update(score=job["score"], new=fresh.is_new(job), age=fresh.age_label(job),
+                           before=fresh.applied_before(conn, job["id"]), qual=minimums.load(conn, job["id"]),
+                           people=len(contacts.at_company(conn, job["company"])), have=pick("have"),
+                           missing=pick("missing"), summary=desc[:420] + ("…" if len(desc) > 420 else ""),
+                           areas=[r["area"] for r in conn.execute("SELECT area FROM job_places WHERE job_id = ?",
+                                                                    (job["id"],))])
+        return render(request, "triage.html", **ctx)
+
+    @app.post("/triage/{job_id}")
+    async def triage_post(request: Request, job_id: int):
+        form = await posted(request)
+        action = str(form.get("action", ""))
+        if action == "open":
+            return go(f"/jobs/{job_id}")
+        with db.connect(paths.db) as conn:
+            try:
+                with conn:
+                    triage.decide(conn, job_id, action, load_profile(paths.profile))
+            except GateError as exc:
+                return go("/triage?" + urlencode({"err": str(exc)}))
+        return go("/triage")
+
+    # ------------------------------------------------------------ people (referrals)
+
+    @app.get("/people", response_class=HTMLResponse)
+    def people_page(request: Request):
+        with db.connect(paths.db) as conn:
+            people = contacts.everyone(conn)
+            counts = contacts.counts(conn)
+            companies = [r[0] for r in conn.execute(
+                """SELECT DISTINCT company FROM jobs WHERE status NOT IN ('rejected', 'posting_closed')
+                   ORDER BY company COLLATE NOCASE LIMIT 500""")]
+        return render(request, "people.html", people=people, counts=counts, STATES=contacts.STATES,
+                      companies=companies)
+
+    @app.post("/people")
+    async def people_post(request: Request):
+        form = await posted(request)
+        action = str(form.get("action", ""))
+        back = str(form.get("back", "/people"))
+        if not back.startswith("/") or back.startswith("//"):
+            back = "/people"
+        with db.connect(paths.db) as conn:
+            try:
+                with conn:
+                    cid = int(form.get("id") or 0)
+                    if action == "add":
+                        job_id = str(form.get("job_id", ""))
+                        contacts.add(conn, str(form.get("company", "")), str(form.get("name", "")),
+                                     str(form.get("role", "")), str(form.get("link", "")),
+                                     job_id=int(job_id) if job_id.isdigit() else None)
+                        return go(back, "person_added")
+                    if action == "state":
+                        contacts.set_state(conn, cid, str(form.get("state", "")))
+                    elif action == "asked":
+                        contacts.set_state(conn, cid, "asked")
+                    elif action == "remove":
+                        contacts.remove(conn, cid)
+                    else:
+                        raise contacts.ContactError(f"unknown action {action!r}")
+            except (contacts.ContactError, ValueError) as exc:
+                return go("/people?" + urlencode({"err": str(exc)}))
+        return go(back, "saved")
+
+    @app.get("/answers", response_class=HTMLResponse)
+    def answers_page(request: Request):
+        with db.connect(paths.db) as conn:
+            questions = bulk.shared_questions(conn)
+        return render(request, "answers.html", questions=questions)
+
+    @app.post("/answers")
+    async def answers_post(request: Request):
+        form = await posted(request)
+        profile = profile_or_400()
+        value = "; ".join(str(v).strip() for v in form.getlist("value") if str(v).strip())
+        jobs = {int(j) for j in form.getlist("job") if str(j).isdigit()}
+        with db.connect(paths.db) as conn:
+            try:
+                with conn:
+                    n = bulk.answer(conn, profile, str(form.get("gid", "")), value, jobs,
+                                    remember=form.get("remember") == "on")
+            except GateError as exc:
+                return render(request, "answers.html", status_code=400, error=str(exc),
+                              questions=bulk.shared_questions(conn))
+        if form.get("remember") == "on":
+            from jobpilot.onboarding.profile import save_profile
+
+            save_profile(profile, paths.profile)
+        return go("/answers?" + urlencode({"n": n}), "answered")
 
     # ------------------------------------------------------------ add a job from a link
 
@@ -599,6 +772,17 @@ def create_app(paths: Paths) -> FastAPI:
                 return JSONResponse({"error": str(exc)}, status_code=400)
         return {"job_id": job_id, "new": new, "path": f"/jobs/{job_id}"}
 
+    @app.post("/api/ext/status")
+    async def ext_status(request: Request):
+        """Does JobPilot know the job on this page? (For the toolbar badge.)"""
+        from jobpilot.sources.link import find_job
+
+        data = await ext_json(request)
+        url = str(data.get("url", ""))[:2000]
+        with db.connect(paths.db) as conn:
+            job = find_job(conn, url) if url.startswith(("http://", "https://")) else None
+        return {"job": {"id": job["id"], "status": job["status"], "title": job["title"]} if job else None}
+
     @app.post("/api/ext/filled")
     async def ext_filled(request: Request):
         data = await ext_json(request)
@@ -668,10 +852,18 @@ def create_app(paths: Paths) -> FastAPI:
             sub = outcomes._day(app_row["submitted_at"]) if app_row else None
             kind = "thank_you" if outcome and outcome["stage"] in ("interview", "final") else "followup"
             draft_ = outcomes.draft(kind, job["title"], job["company"], sub, profile)
+        people = contacts.at_company(conn, job["company"])
+        ask = None
+        if people:
+            ask = contacts.ask_draft(people[0], job["title"], job["company"], job["url"], profile)
         return dict(outcome=outcome, outcome_draft=draft_, STAGES=outcomes.STAGES, BY_KEY=outcomes.BY_KEY,
+                    age=fresh.age_label(job), is_new=fresh.is_new(job) and job["status"] != "submitted",
+                    open_check=fresh.last_check(conn, job_id), reposts=fresh.reposts(conn, job_id),
+                    applied_before=fresh.applied_before(conn, job_id) if job["status"] != "submitted" else None,
+                    people=people, ask_draft=ask, CONTACT_LABEL=contacts.LABEL,
                     qual=minimums.load(conn, job_id), job_areas=job_areas, tailored=tailored, tailor_moves=tailor.moves(tailored), job=job, match=match, skills=grouped, app=app_, events=events, sources=sources,
                     resumes=resumes, next_id=nxt, editable=job["status"] in (*PRE_APPROVAL, "approved", "filled"),
-                    form=form_row, can_load_form=job["ats"] in FORM_ATS, can_fill=job["ats"] in FORM_ATS, run=run,
+                    form=form_row, can_load_form=job["ats"] in FORM_ATS, can_fill=(job["apply_url"] or job["url"]).startswith("http"), run=run,
                     rememberable=plan.rememberable,
                     run_steps=run_steps)
 
@@ -752,6 +944,15 @@ def create_app(paths: Paths) -> FastAPI:
                         conn.execute("UPDATE applications SET notes = ? WHERE job_id = ?",
                                      (str(form.get("notes", "")), job_id))
                 with conn:
+                    if action == "check_open":
+                        jrow = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+                        http = _http()
+                        try:
+                            state = fresh.still_open(http, jrow, _gh_tokens())
+                        finally:
+                            http.close()
+                        fresh.record_check(conn, job_id, state)
+                        return go(f"/jobs/{job_id}", f"open_{state}")
                     if action == "load_form":
                         load_form_for(conn, job_id, profile)
                         return go(f"/jobs/{job_id}", "form_loaded")
@@ -876,6 +1077,12 @@ def create_app(paths: Paths) -> FastAPI:
         return go("/settings", "settings")
 
     # ------------------------------------------------------------ exports
+
+    @app.get("/backup.zip")
+    def backup_zip():
+        from jobpilot.backup import default_name, make_backup
+
+        return _temp_file(lambda p: make_backup(paths, p), default_name(), "application/zip")
 
     @app.get("/export/applications.{fmt}")
     def export_log(fmt: str):

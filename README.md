@@ -113,7 +113,17 @@ The dashboard has six main pages:
   streak, follow-ups due, good fits, and a box to paste a job link.
 - **Find jobs.** Tabs for jobs you qualify for, ones you're one requirement short of, all jobs, and
   skills to learn. Search, region chips, and more filters behind **Filters**.
-- **Apply.** Everything waiting on you. Each job's page shows:
+- **Apply.** Everything waiting on you, with **New** badges on postings from the last two days and
+  **applied before** on reposts of a role you already applied to. From here:
+  - **Sort N quickly**: one card at a time. Press **Y** keep, **L** later, **N** pass, **O** review now.
+    Newest postings come first, because early applications get more replies.
+  - **Answer them once**: a question that's waiting in many applications (say, "Phone" or "How did you
+    hear about us?") answered once for every job you tick. Protected questions start with every job
+    unticked, so you choose which ones your answer is true for. Legal and consent questions never show here.
+  - **Check which are still open**: looks up each posting (politely, robots.txt respected) and moves
+    closed ones out of your queue. Approved ones only get a warning.
+
+  Each job's page shows:
   - its description, match score, skill gaps and minimum requirements;
   - every field autofill would type, next to where the value came from (your profile, your resume, or you);
   - DRAFT written answers and private notes;
@@ -122,21 +132,32 @@ The dashboard has six main pages:
   - a **Remember** box next to answers you typed, so the same question gets that answer next time
     (never for work authorization, sponsorship, salary, EEO, background or legal questions);
   - **Already applied on the site yourself?** to log it without filling anything;
-  - **Tailored resume**: a version of your resume reordered for this job (see below).
+  - **Tailored resume**: a version of your resume reordered for this job (see below);
+  - how long it's been posted, **Check it's still open**, and other listings of the same role;
+  - **People at the company**: who you know there and a DRAFT referral ask to copy (you send it).
 
-  **Fill all approved, one by one** on Apply opens each approved Greenhouse/Lever form in turn. Each
-  one stops before Submit, as always.
+  **Fill the form for me** works on any site now. Greenhouse and Lever use their own fillers; on every
+  other site (Ashby, Workday, SmartRecruiters, Workable, company pages) JobPilot reads the form in the
+  window it opens and fills it with the same rules as the browser button. It keeps filling each new page
+  of a multi-page form while the window is open, never overwrites anything already in a field, and never
+  clicks Next or Submit. If the site asks you to sign in, you sign in yourself in that window and
+  JobPilot carries on. **Fill all approved, one by one** opens each approved form in turn, checking first
+  that the posting is still open.
 - **Applications.** Your submitted applications as a **Pipeline** (Applied, Screen, Assessment,
   Interviewing, Offer, Closed; drag a card to change its stage) or a **List**. Tiles for applications,
   assessments, interviews and offers, a **Coming up** week strip for next steps (click **Done** when
   finished), search (press `/`), filters by field and type, and sorting. **+ Add** logs an application
   you made somewhere else.
 - **Insights.** Your pace (today, this week, this month, streak), applications per week, the funnel
-  from applied to offer, and which sources, fields and resumes get replies.
+  from applied to offer, and which sources, fields, resumes, referrals, and how soon after posting you
+  applied get replies.
 - **Settings.** Which jobs you see, follow-ups and the browser button. Sources, the matching engine,
   rate limits and the run log are under **Advanced settings**. **Resumes** (from Settings) lists your
   resume versions with how often each gets replies, lets you upload one or pick the default, and shows
-  the answers you asked JobPilot to remember.
+  the answers you asked JobPilot to remember. Add your own there too: write `{company}`, `{title}` or
+  `{skills}` in an answer and each job gets a filled-in DRAFT to check. **People** (from Applications or
+  Settings) lists everyone you know at a company and whether you've asked for a referral. **Download a
+  backup** saves your data to one zip.
 
 **+ Add a job** takes a link to any posting (`jobpilot add URL` from a terminal). Greenhouse, Lever and
 Ashby postings are read through their public APIs; for other sites you type the title and company.
@@ -270,6 +291,7 @@ Details: [docs/AUTOFILL.md](docs/AUTOFILL.md).
 | `jobpilot run [--skip-discover] [--enrich-limit N] [--forms-limit N]` | The daily pipeline: discover, enrich, match, prepare, load forms. Fills nothing. |
 | `jobpilot doctor [--no-browser]` | Check your setup and say how to fix anything missing. |
 | `jobpilot export FILE.csv\|FILE.xlsx` | Export the applications log (no answers or personal details). |
+| `jobpilot backup [FILE.zip]` | Save the database, profile, settings and resumes to one zip (browser sign-ins and keys left out). |
 
 ## Rules JobPilot follows
 

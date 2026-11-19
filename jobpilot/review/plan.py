@@ -117,11 +117,18 @@ def plan_fields(conn: sqlite3.Connection, job: sqlite3.Row, profile: Profile, re
     from jobpilot.forms import load_form
     from jobpilot.review.mapping import plan_from_form
 
+    from jobpilot.review.drafts import fill_template, is_template
+
     form = load_form(conn, job["id"])
-    if not form:
-        return build_fields(profile, resume_label)
     m = conn.execute("SELECT skills_json FROM matches WHERE job_id = ?", (job["id"],)).fetchone()
     skills = json.loads(m["skills_json"]).get("skills", []) if m else []
+    if not form:
+        fields = build_fields(profile, resume_label)
+        for f in fields:  # saved answers written as templates become a DRAFT for this job
+            if f.maps_to.startswith("short:") and is_template(f.value):
+                f.value, f.state = fill_template(f.value, job, skills), DRAFT
+                f.source = "your template (profile: short_answers), filled in for this job. Check it."
+        return fields
     return plan_from_form(form[1], profile, resume_label, job, skills)
 
 
@@ -368,7 +375,9 @@ def queue(conn: sqlite3.Connection, limit: int = 50) -> list[sqlite3.Row]:
         f"""SELECT j.id, j.title, j.company, j.status, m.score, a.skipped_at FROM jobs j
             LEFT JOIN matches m ON m.job_id = j.id LEFT JOIN applications a ON a.job_id = j.id
             WHERE j.status IN ({','.join('?' * len(QUEUE_STATUSES))})
-            ORDER BY a.skipped_at IS NOT NULL, a.skipped_at, m.score DESC, j.id LIMIT ?""",
+            ORDER BY a.skipped_at IS NOT NULL, a.skipped_at,
+                     EXISTS (SELECT 1 FROM application_events e WHERE e.job_id = j.id AND e.action = 'kept') DESC,
+                     m.score DESC, j.id LIMIT ?""",
         (*QUEUE_STATUSES, limit)).fetchall()
 
 

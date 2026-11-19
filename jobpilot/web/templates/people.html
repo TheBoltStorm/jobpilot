@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}People{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>People</h1>
+  <span class="sub">Who you know at each company. A referral gets far more replies than applying cold. You contact them yourself.</span>
+  <span class="right"><a class="btn small-btn" href="/applied">Applications</a></span>
+</div>
+
+<div class="tiles small-tiles">
+  {% for s in STATES %}<div class="tile-static"><span class="n">{{ counts.get(s.key, 0) }}</span><span class="l">{{ s.label }}</span></div>{% endfor %}
+</div>
+
+<section class="card">
+  <h2>Add someone</h2>
+  <form method="post" action="/people" class="upload">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="add">
+    <input name="company" placeholder="Company" required list="companies">
+    <datalist id="companies">{% for c in companies %}<option value="{{ c }}">{% endfor %}</datalist>
+    <input name="name" placeholder="Name" required>
+    <input name="role" placeholder="Their role (optional)">
+    <input name="link" placeholder="LinkedIn link or email (optional)">
+    <button class="btn primary">Add</button>
+  </form>
+</section>
+
+<section class="card">
+  {% if people %}
+  <table class="table">
+    <thead><tr><th>Name</th><th>Company</th><th>Open jobs</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for c in people %}
+    <tr>
+      <td><b>{% if c.link %}<a href="{{ c.link }}" target="_blank" rel="noopener noreferrer">{{ c.name }}</a>{% else %}{{ c.name }}{% endif %}</b>
+        {% if c.role %}<div class="muted small">{{ c.role }}</div>{% endif %}</td>
+      <td>{{ c.company }}</td>
+      <td class="num">{% if c.open_jobs %}<a href="/jobs?show=all&q={{ c.company|urlencode }}">{{ c.open_jobs }}</a>{% else %}<span class="muted">0</span>{% endif %}</td>
+      <td><form method="post" action="/people" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="id" value="{{ c.id }}"><input type="hidden" name="action" value="state">
+        <select name="state" onchange="this.form.requestSubmit()" aria-label="Status">{% for s in STATES %}<option value="{{ s.key }}" {% if c.status == s.key %}selected{% endif %}>{{ s.label }}</option>{% endfor %}</select>
+        <noscript><button class="btn small-btn">Save</button></noscript></form>
+        {% if c.asked_at %}<div class="muted small">asked {{ c.asked_at|day }}</div>{% endif %}</td>
+      <td><form method="post" action="/people" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="id" value="{{ c.id }}"><button class="btn small-btn" name="action" value="remove">Remove</button></form></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">Nobody yet. Add people here or from a job's page, and JobPilot drafts the referral ask for you.</p>{% endif %}
+</section>
+{% endblock %}

@@ -150,12 +150,19 @@ From a terminal: `jobpilot add https://...`
 2. **Optional: tailor your resume.** On the job's page, **Suggest a tailored version** reorders your
    real content so the most relevant parts come first. Nothing is invented. Approve it to create a DOCX.
 3. **Fill the form.**
-   - **Greenhouse and Lever jobs:** click **Fill the form for me**. A browser window opens with the form
-     and JobPilot fills exactly what you approved.
-   - **Any other site:** click **Open the application**, then click the **JobPilot browser button**
+   - Click **Fill the form for me** (or **Approve & fill** in one step). A browser window opens and
+     JobPilot fills what you approved. This works on any site: on Greenhouse and Lever it uses the form
+     it loaded; elsewhere (Ashby, Workday, company sites) it reads the form in that window.
+   - **Multi-page forms:** keep the window open. Click **Next** yourself; JobPilot fills each new page as
+     it appears and never changes a field that already has something in it.
+   - **Sign-in pages (Workday and others):** sign in, or make your account, yourself in that window.
+     JobPilot never types passwords; it carries on with the form once you're in. The window keeps its
+     own profile, so you stay signed in next time. Workday accounts are per company, so expect one sign-in
+     per employer.
+   - **Prefer your own browser?** Click **Open the application**, then the **JobPilot browser button**
      (set it up once, below).
-   - **Several approved?** On **Apply**, **Fill all approved, one by one** opens each Greenhouse/Lever
-     form in turn.
+   - **Several approved?** On **Apply**, **Fill all approved, one by one** opens each approved form in
+     turn and skips any whose posting has closed.
 4. **You submit.** JobPilot stops on the last page. Look it over, then click **Submit** on the site
    yourself. JobPilot can't submit for you, and there's no setting to make it.
 5. **Mark it.** Back on the job's page in the dashboard, tick the box and click **Mark as submitted**.
@@ -177,7 +184,10 @@ Set it up once:
 4. Click the puzzle-piece icon in the toolbar and pin **JobPilot**.
 5. Click the JobPilot button, paste the key from Settings, and click **Connect**.
 
-Then, on an application form: click the button → **Fill this page** → check the list → **Fill ticked fields**.
+Then, on an application form: press **Alt+Shift+J** (or click the button). It reads the form right away;
+check the list and press **Enter** to fill the ticked fields. On page 2 of a form, do the same: fields
+that already have something in them are left alone. On job sites the button shows **FILL**, or a green
+**GO** when it's a job you already approved in JobPilot.
 
 What it won't do: fill sign-in or sign-up pages, create accounts, solve CAPTCHAs, attach files, or answer
 questions only you can answer (work authorization, sponsorship, salary, EEO, background checks, legal
@@ -200,6 +210,10 @@ jobpilot run
 jobpilot dashboard
 ```
 
+Then in the dashboard: **Sort** the new jobs (Y / L / N), **Answer them once** for questions many
+applications share, approve with **Approve & next** (Ctrl+Enter), and **Fill all approved, one by one**.
+Click Submit on each form yourself.
+
 ## Updating
 
 ```bash
@@ -213,7 +227,9 @@ Your data is upgraded automatically the next time you run any command.
 
 ## Backing up, moving, removing
 
-- **Back up:** copy the `data/` folder and `.env`. That's everything personal.
+- **Back up:** `jobpilot backup` (or **Settings → Download a backup**) writes one zip with your database,
+  profile, settings and resumes. Browser sign-ins, the browser-button key and `.env` are left out; copy
+  `.env` yourself if you use an API key.
 - **Keep your data somewhere else:** set `JOBPILOT_HOME=D:\somewhere` in `.env`.
 - **Uninstall:** delete the `jobpilot` folder. Nothing is installed outside it.
   Copy `data/` out first if you want to keep your profile and history.

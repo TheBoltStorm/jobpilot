@@ -17,11 +17,21 @@ document.addEventListener("DOMContentLoaded", () => {
     catch { if (body) { body.select(); } btn.textContent = "Select and copy"; }
   }));
 
+  // Answer once: tick or untick every job for a question (you still choose which).
+  document.querySelectorAll("[data-tick]").forEach((btn) => btn.addEventListener("click", () => {
+    btn.closest("form").querySelectorAll("input[name=job]").forEach((b) => { b.checked = btn.dataset.tick === "all"; });
+  }));
+
   // "/" jumps to the search box (unless you're typing somewhere).
   const hot = document.querySelector("[data-hotkey='/']");
   document.addEventListener("keydown", (e) => {
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) || document.activeElement.isContentEditable;
     if (hot && e.key === "/" && !typing) { e.preventDefault(); hot.focus(); }
+    // Single-key decisions where a page offers them (Sort jobs: Y keep, L later, N pass, O open).
+    if (!typing && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1) {
+      const btn = document.querySelector(`[data-key="${CSS.escape(e.key.toLowerCase())}"]`);
+      if (btn) { e.preventDefault(); btn.click(); return; }
+    }
     // Ctrl+Enter on a job page: Approve & next (the confirm box still has to be ticked).
     const quick = document.querySelector("[data-hotkey-submit]");
     if (quick && e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); quick.click(); }

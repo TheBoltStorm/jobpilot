@@ -393,3 +393,23 @@ details.elsewhere > summary { cursor: pointer; color: var(--muted); }
 .apps-left { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
 .apps-left .search-card { margin: 0; }
 .apps-top { align-items: start; }
+
+/* fast apply: freshness, answer once, sorting, people */
+.page-head .right form { margin: 0; }
+form.inline { display: inline; margin: 0; }
+form.stack { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.fresh-strip { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: -4px 0 10px; }
+.fresh-strip .badge { margin: 0; }
+.callout { border-color: var(--accent); }
+.callout p { margin: 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ao-row { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; }
+.ao-row input, .ao-row select, .ao-row textarea { flex: 1; min-width: 220px; }
+.ao-opts { display: flex; flex-wrap: wrap; gap: 4px 12px; flex: 1; }
+.ao-jobs { margin-top: 6px; }
+.ao-jobs label { display: flex; gap: 6px; align-items: center; }
+.triage { max-width: 760px; }
+.tri-title { font-size: 1.35rem; margin: 0 0 4px; }
+.tri-desc { max-height: 7.5em; overflow: hidden; }
+.tri-btns .btn { min-width: 110px; }
+.tri-btns kbd { margin-left: 4px; }
+.small-tiles { grid-template-columns: repeat(4, minmax(0, 160px)); margin-bottom: var(--gap); }

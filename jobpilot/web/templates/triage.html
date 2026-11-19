@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Sort jobs{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Sort jobs</h1>
+  <span class="sub">{{ left }} left to sort. Newest first: early applications get more replies.</span>
+  <span class="right"><a class="btn small-btn" href="/apply">Apply</a></span>
+</div>
+{% if job %}
+<section class="card triage" data-job="{{ job.id }}">
+  <div class="job-head">
+    <div>
+      <h2 class="tri-title">{{ job.title }}</h2>
+      <p class="meta"><b>{{ job.company }}</b>{% if areas %} · {{ areas|join(' · ') }}{% elif job.location %} · {{ job.location }}{% endif %}
+        {% if job.role_type %} · {{ job.role_type }}{% endif %}
+        · <a href="{{ job.url }}" target="_blank" rel="noopener noreferrer">posting ↗</a></p>
+      <p>{% if new %}<span class="badge now">New</span>{% endif %}<span class="muted small">{{ age }}</span>
+        {% if before %}<span class="badge warn">You applied to this role on {{ before.submitted_at|day }}</span>{% endif %}
+        {% if qual %}<span class="badge">{{ {'qualify': 'You qualify', 'close': 'One requirement short', 'not': 'Two or more short'}.get(qual.status, '') }}</span>{% endif %}
+        {% if people %}<span class="badge">You know {{ people }} {{ 'person' if people == 1 else 'people' }} here</span>{% endif %}</p>
+    </div>
+    {% if score is not none %}<span class="score big sc-{{ score // 25 }}">{{ score }}</span>{% endif %}
+  </div>
+  {% if have or missing %}
+  <p class="small">{% if have %}<b>You have:</b> {{ have|join(', ') }}{% endif %}
+    {% if missing %}<br><b>Missing:</b> <span class="warn-text">{{ missing|join(', ') }}</span>{% endif %}</p>
+  {% endif %}
+  {% if summary %}<p class="small muted tri-desc">{{ summary }}</p>{% endif %}
+  <form method="post" action="/triage/{{ job.id }}" class="btns tri-btns">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="btn primary" name="action" value="keep" data-key="y">Keep <kbd>Y</kbd></button>
+    <button class="btn" name="action" value="open" data-key="o">Review now <kbd>O</kbd></button>
+    <button class="btn" name="action" value="later" data-key="l">Later <kbd>L</kbd></button>
+    <button class="btn danger" name="action" value="pass" data-key="n">Pass <kbd>N</kbd></button>
+  </form>
+  <p class="muted small">Keep leaves it in your Apply queue (kept ones come first). Pass rejects it; you can reopen it from its page.</p>
+</section>
+{% else %}
+<section class="card"><p>All sorted. <a href="/apply">Go to Apply</a>{% if kept %} — {{ kept }} kept jobs are waiting{% endif %}.</p></section>
+{% endif %}
+{% endblock %}
