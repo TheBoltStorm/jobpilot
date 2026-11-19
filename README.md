@@ -107,21 +107,28 @@ jobpilot dashboard          # opens http://127.0.0.1:8765 (only reachable from t
 jobpilot export applications.xlsx   # applications log (.csv or .xlsx), no answers included
 ```
 
-The dashboard has:
+The dashboard has five pages:
 
-- **Board.** Counts for every status, from Found to Submitted, plus what to review next.
-- **Review page** for each job:
-  - its description, match score and skill gaps;
+- **Home.** What to do next, follow-ups due, good fits, and a box to paste a job link.
+- **Find jobs.** Tabs for jobs you qualify for, ones you're one requirement short of, all jobs, and
+  skills to learn. Search, region chips, and more filters behind **Filters**.
+- **Apply.** Everything waiting on you. Each job's page shows:
+  - its description, match score, skill gaps and minimum requirements;
   - every field autofill would type, next to where the value came from (your profile, your resume, or you);
   - DRAFT written answers and private notes;
-  - **Approve**, **Save edits**, **Skip** and **Reject** buttons;
+  - **Approve**, **Save edits**, **Skip** and **Reject** buttons, then **Fill the form for me**;
   - **Tailored resume**: a version of your resume reordered for this job (see below).
-- **Jobs.** Filter by region and area, status, field, type, score or search text.
-- **You qualify.** Open jobs where you meet every minimum requirement found in the posting, plus a
-  tab for jobs you're one requirement short of (see below).
-- **Skill gaps.** The gap report, exportable to Markdown or CSV.
-- **Run log.** Every discovery and scoring run, with Claude costs.
-- **Settings.** Sources, filters, the scoring engine and rate limits.
+- **Applied.** Stages, follow-up drafts and what's working (see below).
+- **Settings.** Which jobs you see, follow-ups and the browser button. Sources, the matching engine,
+  rate limits and the run log are under **Advanced settings**.
+
+**+ Add a job** takes a link to any posting (`jobpilot add URL` from a terminal). Greenhouse, Lever and
+Ashby postings are read through their public APIs; for other sites you type the title and company.
+
+**The browser button** (`extension/`, an Edge/Chrome extension) fills application forms on any site you
+open. It shows every value first, fills only what you tick, skips sign-in pages, files and questions only
+you can answer, and never submits. It talks only to the dashboard on your computer, using a key from
+Settings. Setup: [docs/INSTALL.md](docs/INSTALL.md#the-browser-button-fill-forms-on-any-site).
 
 How the gate works:
 
@@ -238,6 +245,7 @@ Details: [docs/AUTOFILL.md](docs/AUTOFILL.md).
 | `jobpilot autofill ID [--fill] [--headless] [--browser msedge\|chrome]` | Dry run (default) or fill an approved application. Never submits. |
 | `jobpilot places [--region R] [--top N]` | Open jobs by region and area. |
 | `jobpilot qualify [--close] [--region R] [--area A]` | Jobs where you meet every minimum requirement (or are one short). |
+| `jobpilot add URL [--title T] [--company C] [--location L]` | Add a job from a link you found. |
 | `jobpilot tailor ID [--approve\|--discard]` | Suggest a resume reordered for one job; approve to create the DOCX. |
 | `jobpilot applied` | Your submitted applications and their stages. |
 | `jobpilot outcome ID STAGE [--on DATE] [--note N] [--next DATE] [--next-note N]` | Record what happened with an application. Only you set this. |

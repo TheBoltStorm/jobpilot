@@ -261,3 +261,37 @@ details.followup > summary { cursor: pointer; display: flex; gap: 6px; align-ite
 .draft-mail { margin: 8px 0 4px; }
 .draft-mail textarea { margin-top: 4px; font-size: .88rem; }
 table.applied select { max-width: 190px; }
+
+/* redesign: header button, add box, tabs, folded filters, next step, apply steps */
+.add-btn { margin-left: auto; white-space: nowrap; }
+.add-box { display: block; }
+.add-box label { display: block; margin-bottom: 6px; }
+.add-row { display: flex; gap: 6px; }
+.add-row input { flex: 1; min-width: 0; }
+.narrow { max-width: 640px; margin: 0 auto; }
+.narrow h1 { margin-bottom: 4px; }
+.tabs { display: flex; gap: 2px; list-style: none; padding: 0; margin: 0 0 10px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.tabs a { display: inline-block; padding: 6px 12px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs a:hover { color: var(--text); text-decoration: none; }
+.tabs a[aria-current] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.tabs b { font-weight: 600; color: var(--ok); font-variant-numeric: tabular-nums; }
+details.more-filters { display: contents; }
+details.more-filters > summary { cursor: pointer; padding: 4px 10px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--surface); font-size: .88rem; list-style: none; }
+details.more-filters[open] > summary { background: var(--sunk); }
+.next-step { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 8px 10px; margin: 6px 0;
+  border-radius: 6px; background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.next-step p { margin: 0; }
+details.extras { margin-top: 10px; }
+details.extras > summary { cursor: pointer; color: var(--accent); font-size: .9rem; }
+.steps-how { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; padding: 0;
+  margin: 0 0 var(--gap); list-style: none; counter-reset: s; }
+.steps-how li { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px 8px 34px;
+  position: relative; font-size: .88rem; counter-increment: s; }
+.steps-how li::before { content: counter(s); position: absolute; left: 10px; top: 8px; width: 17px; height: 17px; border-radius: 50%;
+  background: var(--accent); color: var(--accent-ink); font-size: .72rem; font-weight: 700; display: grid; place-items: center; }
+ol.setup { padding-left: 1.2rem; margin: 6px 0; }
+.key-row { display: flex; gap: 6px; }
+.key-row input { flex: 1; min-width: 0; font-family: ui-monospace, Consolas, monospace; font-size: .85rem; }
+form.settings details.advanced { grid-column: 1 / -1; }
+form.settings details.advanced h3 { margin-top: 1rem; }

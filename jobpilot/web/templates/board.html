@@ -1,73 +1,76 @@
 {% extends "base.html" %}
-{% block title %}Board{% endblock %}
+{% block title %}Home{% endblock %}
 {% block content %}
-<div class="page-head">
-  <h1>Board</h1>
-  <span class="sub">{{ total }} jobs stored</span>
-  <span class="right small">Applications log: <a href="/export/applications.csv">CSV</a> · <a href="/export/applications.xlsx">Excel</a></span>
-</div>
+<form method="post" action="/add" class="add-box card">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label for="add-url"><b>Found a job somewhere?</b> Paste its link and JobPilot gets it ready to apply.</label>
+  <div class="add-row">
+    <input id="add-url" name="url" type="url" placeholder="https://..." required>
+    <button class="btn primary">Add job</button>
+  </div>
+</form>
 
 <div class="stat">
-  <a href="/review"><span class="n">{{ counts.get('ready_to_fill', 0) + counts.get('needs_human', 0) }}</span>
-    <span class="l">waiting for your review</span></a>
-  <a href="/qualify"><span class="n ok">{{ qual_counts.get('qualify', 0) }}</span>
-    <span class="l">you meet the minimums for</span></a>
-  <a href="/qualify?show=close"><span class="n">{{ qual_counts.get('close', 0) }}</span>
-    <span class="l">one requirement short</span></a>
+  <a href="/apply"><span class="n{{ ' ok' if review_n else '' }}">{{ review_n }}</span>
+    <span class="l">jobs waiting for you to review</span></a>
+  <a href="/jobs?show=qualify"><span class="n">{{ qual_counts.get('qualify', 0) }}</span>
+    <span class="l">jobs you meet the minimums for</span></a>
   <a href="/applied#due"><span class="n{{ ' warn-text' if due_n else '' }}">{{ due_n }}</span>
     <span class="l">follow-ups to send</span></a>
   <a href="/applied"><span class="n">{{ counts.get('submitted', 0) }}</span>
     <span class="l">applied · {{ responded }} heard back</span></a>
 </div>
 
-<ol class="buckets" aria-label="Jobs by status">
-  {% for s in STATUSES if counts.get(s.key) %}
-  <li class="bucket b-{{ s.key }}"><a href="/jobs?status={{ s.key }}" title="{{ s.hint }}">
-    <span class="n">{{ counts.get(s.key) }}</span><span class="l">{{ s.label }}</span></a></li>
-  {% endfor %}
-</ol>
-
 {% if counts.get('matched') %}
 <form method="post" action="/prepare" class="banner warn">
   <input type="hidden" name="csrf" value="{{ csrf }}">
-  {{ counts.get('matched') }} matched jobs aren't prepared yet.
-  <button class="btn small-btn">Prepare them</button>
-  <span class="small">Sorts them into Ready to fill / Needs human / Custom site. Nothing is filled or sent.</span>
+  {{ counts.get('matched') }} new matches aren't ready to review yet.
+  <button class="btn small-btn">Get them ready</button>
+  <span class="small">Plans their answers. Nothing is filled or sent.</span>
 </form>
 {% endif %}
 
 <div class="grid2">
   <section class="card">
-    <div class="card-head"><h2>Next to review</h2>{% if queue %}<a class="btn primary small-btn" href="/review">Start</a>{% endif %}</div>
-    {% if queue %}
+    <div class="card-head"><h2>Your next steps</h2>{% if queue %}<a class="btn primary small-btn" href="/review">Start reviewing</a>{% endif %}</div>
+    {% if to_submit or queue or due %}
     <ul class="list">
+      {% for r in to_submit %}
+      <li><span class="tag q-qualify">submit</span>
+        <span class="grow clip"><a href="/jobs/{{ r.id }}">{{ r.title }}</a> <span class="muted">· {{ r.company }}</span></span>
+        <span class="small muted">{{ 'filled, check and submit' if r.status == 'filled' else 'approved, fill the form' }}</span></li>
+      {% endfor %}
+      {% for d in due %}
+      <li><span class="tag draft">follow up</span>
+        <span class="grow clip"><a href="/applied#due">{{ d.title }}</a> <span class="muted">· {{ d.company }}</span></span>
+        <span class="small muted">{{ d.days }} days quiet</span></li>
+      {% endfor %}
       {% for r in queue %}
       <li><span class="score sc-{{ (r.score or 0) // 25 }}">{{ r.score if r.score is not none else '–' }}</span>
         <span class="grow clip"><a href="/jobs/{{ r.id }}">{{ r.title }}</a> <span class="muted">· {{ r.company }}</span></span>
-        {% if r.skipped_at %}<span class="tag">skipped</span>{% endif %}
         <span class="pill s-{{ r.status }}">{{ r.status|label }}</span></li>
       {% endfor %}
     </ul>
     {% else %}
-    <p class="muted">Nothing waiting. Run <code>jobpilot run</code> to find and prepare more.</p>
+    <p class="muted">Nothing waiting. Run <code>jobpilot run</code> to find more jobs, or add one from a link above.</p>
     {% endif %}
   </section>
 
   <section class="card">
-    <div class="card-head"><h2>You qualify</h2><a class="small" href="/qualify">See all →</a></div>
+    <div class="card-head"><h2>Good fits</h2><a class="small" href="/jobs?show=qualify">See all →</a></div>
     {% if qualify %}
+    <p class="muted small">You meet every minimum requirement these postings list.</p>
     <ul class="list">
       {% for r in qualify %}
       <li><span class="score sc-{{ (r.score or 0) // 25 }}">{{ r.score if r.score is not none else '–' }}</span>
         <span class="grow clip"><a href="/jobs/{{ r.id }}">{{ r.title }}</a> <span class="muted">· {{ r.company }}</span></span></li>
       {% endfor %}
     </ul>
-    {% else %}<p class="muted">No open jobs where you meet every minimum yet.</p>{% endif %}
-    {% if undescribed %}<p class="muted small">{{ undescribed }} jobs have no description yet, so they can't be checked.</p>{% endif %}
+    {% else %}<p class="muted">No open jobs where you meet every minimum yet. <a href="/jobs?show=all">Browse all jobs</a>.</p>{% endif %}
   </section>
 </div>
 
-<details class="card" {% if not queue %}open{% endif %}>
+<details class="card">
   <summary>Recent activity</summary>
   {% if recent %}
   <ul class="events">
@@ -79,5 +82,6 @@
     {% endfor %}
   </ul>
   {% else %}<p class="muted">No activity yet.</p>{% endif %}
+  <p class="small muted">{{ total }} jobs stored · applications log: <a href="/export/applications.csv">CSV</a> · <a href="/export/applications.xlsx">Excel</a></p>
 </details>
 {% endblock %}

@@ -99,6 +99,8 @@
       </tbody>
     </table>
 
+    <details class="extras" {% if app.drafts or app.notes %}open{% endif %}>
+    <summary>Extra answers and notes</summary>
     <h3>Extra answers</h3>
     <p class="muted small">Answers to keep with this application, e.g. for a custom site's questions.</p>
     <input type="hidden" name="draft_count" value="{{ app.drafts|length }}">
@@ -120,6 +122,7 @@
 
     <h3>Notes</h3>
     <textarea name="notes" rows="2" placeholder="Private notes (referral, deadline, contacts...)" {% if not editable and st != 'submitted' %}disabled{% endif %}>{{ app.notes }}</textarea>
+    </details>
     {% endif %}
   </section>
 
@@ -143,9 +146,21 @@
           <button class="btn danger" name="action" value="reject">Reject</button></span>
       </div>
     {% elif st in ('approved', 'filled') %}
-      <p>{% if st == 'approved' %}Approved {{ app.approved_at|day }}. Autofill fills the form from exactly
-        what you approved and stops before Submit. Changing anything above withdraws the approval.
-        {% else %}The form was filled {{ app.filled_at|day }} and left open on the last page.{% endif %}</p>
+      <p>{% if st == 'approved' %}Approved {{ app.approved_at|day }}. Changing anything above withdraws the approval.
+        {% else %}The form was filled {{ app.filled_at|day }}.{% endif %}</p>
+      <div class="next-step">
+        {% if can_fill %}
+          {% if filling %}<p><b>Filling now.</b> A browser window is open with the form. Check it, then click Submit on the site yourself.</p>
+          {% else %}
+          <button class="btn primary" name="action" value="fill">{{ 'Fill the form again' if st == 'filled' else 'Fill the form for me' }}</button>
+          <span class="small muted">Opens the form in a browser window, fills exactly what you approved, and stops. You click Submit.</span>
+          {% endif %}
+          {% if fill_error %}<p class="err-text small">Last try didn't finish: {{ fill_error }}</p>{% endif %}
+        {% else %}
+          <a class="btn primary" href="{{ job.apply_url or job.url }}" target="_blank" rel="noopener noreferrer">Open the application ↗</a>
+          <span class="small muted">Then click the <a href="/settings#browser-button">JobPilot browser button</a> to fill it from your profile.</span>
+        {% endif %}
+      </div>
       <label class="check confirm"><input type="checkbox" name="confirm_submitted" value="yes"> I clicked Submit on the site myself</label>
       <div class="btns">
         <button class="btn primary" name="action" value="submitted">Mark as submitted</button>
@@ -271,25 +286,17 @@
   </section>
   {% endif %}
 
-  {% if can_load_form %}
-  <section class="card">
-    <h2>Autofill</h2>
-    {% if run %}
-      <p><b>Last {{ 'dry run' if run.mode == 'dry_run' else 'fill' }}</b> {{ run.started_at|day }}:
-        {{ run.outcome|replace('_', ' ') }}.</p>
-      {% if run_steps %}
-      <details><summary class="small">{{ run_steps|length }} fields</summary>
-      <ul class="steps small">
-        {% for st in run_steps %}<li class="a-{{ st.action }}"><b>{{ st.action|replace('_', ' ') }}</b> · {{ st.label }}
-          {% if st.value and st.action in ('would_fill', 'filled') %}<span class="muted">→ {{ st.value[:60] }}</span>{% elif st.note %}<span class="muted">({{ st.note }})</span>{% endif %}</li>{% endfor %}
-      </ul></details>
-      {% endif %}
-    {% else %}<p class="muted">Not run yet.</p>{% endif %}
-    <p class="small">Dry run (types nothing): <code>jobpilot autofill {{ job.id }}</code></p>
-    {% if job.status in ('approved', 'filled') %}
-      <p class="small">Fill, then stop before Submit: <code>jobpilot autofill {{ job.id }} --fill</code></p>
-    {% else %}<p class="muted small">Filling unlocks after you approve.</p>{% endif %}
-  </section>
+  {% if run %}
+  <details class="card">
+    <summary>Last autofill: {{ run.outcome|replace('_', ' ') }} <span class="muted small">{{ run.started_at|day }}</span></summary>
+    {% if run_steps %}
+    <ul class="steps small">
+      {% for st in run_steps %}<li class="a-{{ st.action }}"><b>{{ st.action|replace('_', ' ') }}</b> · {{ st.label }}
+        {% if st.value and st.action in ('would_fill', 'filled') %}<span class="muted">→ {{ st.value[:60] }}</span>{% elif st.note %}<span class="muted">({{ st.note }})</span>{% endif %}</li>{% endfor %}
+    </ul>
+    {% endif %}
+    <p class="muted small">Dry run from a terminal (types nothing): <code>jobpilot autofill {{ job.id }}</code></p>
+  </details>
   {% endif %}
 
   <details class="card">

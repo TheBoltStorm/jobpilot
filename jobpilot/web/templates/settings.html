@@ -1,19 +1,57 @@
 {% extends "base.html" %}
 {% block title %}Settings{% endblock %}
 {% block content %}
-<h1>Settings</h1>
-<p class="muted">Saved to <code>{{ path }}</code>. API keys never go here: put them in <code>.env</code>.
-  There's no setting for automatic submitting, and there never will be.</p>
+<div class="page-head"><h1>Settings</h1>
+  <span class="sub">There's no setting for automatic submitting, and there never will be.</span></div>
 
 <form method="post" action="/settings" class="settings">
   <input type="hidden" name="csrf" value="{{ csrf }}">
 
   <section class="card">
-    <h2>Sources</h2>
+    <h2>Which jobs you see</h2>
+    <label class="check"><input type="checkbox" name="filter_by_profile" {% if s.filter_by_profile %}checked{% endif %}> Only keep jobs that fit your target role types and fields</label>
+    <label class="row">Skip postings older than <input type="number" name="max_age_days" value="{{ s.max_age_days }}" min="1" class="w4"> days</label>
+    <label class="row">Count a job as a match from a score of <input type="number" name="min_score" value="{{ s.matching.min_score }}" min="0" max="100" class="w4"> (out of 100)</label>
+    <p class="muted small">Your profile (name, education, skills, target fields, locations) lives in
+      <code>profile.yaml</code>. Change it with <code>jobpilot profile edit</code> or re-run <code>jobpilot onboard</code>.</p>
+  </section>
+
+  <section class="card">
+    <h2>Follow-up reminders</h2>
+    <p class="muted small">When a quiet application shows up under "follow-ups to send". JobPilot only drafts the
+      message; you send it yourself.</p>
+    <label class="row">First follow-up after <input type="number" min="1" max="60" name="fu_first" value="{{ s.followups.first_after_days }}" class="w4"> days</label>
+    <label class="row">Then every <input type="number" min="1" max="60" name="fu_every" value="{{ s.followups.then_every_days }}" class="w4"> days, at most
+      <input type="number" min="0" max="5" name="fu_max" value="{{ s.followups.max_followups }}" class="w4"> follow-ups</label>
+    <label class="row">Suggest "No response" after <input type="number" min="7" max="180" name="fu_quiet" value="{{ s.followups.quiet_after_days }}" class="w4"> days</label>
+  </section>
+
+  <section class="card" id="browser-button">
+    <h2>Browser button</h2>
+    <p class="small">Fills application forms on <b>any</b> site you open in Edge or Chrome, from your profile. It shows
+      every value first, fills only when you click, skips sign-in pages and questions only you can answer, and never submits.
+      It can also save the job you're looking at to JobPilot.</p>
+    <ol class="small setup">
+      <li>Open <code>edge://extensions</code> (Edge) or <code>chrome://extensions</code> (Chrome) and turn on <b>Developer mode</b>.</li>
+      <li>Click <b>Load unpacked</b> and pick this folder: <code>{{ ext_dir }}</code></li>
+      <li>Pin the JobPilot button, click it, and paste this key (and the address below if it asks):</li>
+    </ol>
+    <div class="key-row"><input readonly value="{{ ext_key }}" aria-label="Browser button key" data-copy-body>
+      <button type="button" class="btn small-btn" data-copy>Copy key</button></div>
+    <p class="muted small">Dashboard address: <code>{{ base_url }}</code>. The button only works while the dashboard
+      is running (<code>jobpilot dashboard</code>). The key stays on this computer.</p>
+  </section>
+
+  <details class="card advanced" {% if error %}open{% endif %}>
+    <summary>Advanced settings</summary>
+    <p class="muted small">Saved to <code>{{ path }}</code>. API keys never go here: put them in <code>.env</code>.
+      Logs: <a href="/runs">run history</a>.</p>
+
+    <h3>Job sources</h3>
     {% set src = s.sources %}
     <label class="check"><input type="checkbox" name="src_github_lists" {% if src.github_lists.enabled %}checked{% endif %}> GitHub internship / new-grad lists</label>
     <label class="block">Lists, one per line: <code>owner/repo branch kind</code> (kind is internship or new_grad)
-      <textarea name="github_lists" rows="4">{% for l in src.github_lists.lists %}{{ l.repo }} {{ l.branch }} {{ l.kind }}
+      <textarea name="github_lists" rows="3">{% for l in src.github_lists.lists %}{{ l.repo }} {{ l.branch }} {{ l.kind }}
 {% endfor %}</textarea></label>
     <label class="check"><input type="checkbox" name="src_greenhouse" {% if src.greenhouse.enabled %}checked{% endif %}> Greenhouse boards</label>
     <label class="check"><input type="checkbox" name="src_lever" {% if src.lever.enabled %}checked{% endif %}> Lever boards</label>
@@ -25,19 +63,10 @@
       <input name="usajobs_keywords" value="{{ src.usajobs.keywords|join(', ') }}"></label>
     <label class="check"><input type="checkbox" name="src_rss" {% if src.rss.enabled %}checked{% endif %}> RSS / Atom feeds</label>
     <label class="block">Feeds, one per line: <code>https://url | Company name</code>
-      <textarea name="rss_feeds" rows="3">{% for f in src.rss.feeds %}{{ f.url }}{% if f.company %} | {{ f.company }}{% endif %}
+      <textarea name="rss_feeds" rows="2">{% for f in src.rss.feeds %}{{ f.url }}{% if f.company %} | {{ f.company }}{% endif %}
 {% endfor %}</textarea></label>
-  </section>
 
-  <section class="card">
-    <h2>Filters</h2>
-    <label class="check"><input type="checkbox" name="filter_by_profile" {% if s.filter_by_profile %}checked{% endif %}> Only keep jobs that fit your target role types and fields</label>
-    <label class="row">Skip postings older than <input type="number" name="max_age_days" value="{{ s.max_age_days }}" min="1" class="w4"> days</label>
-    <label class="row">Minimum match score <input type="number" name="min_score" value="{{ s.matching.min_score }}" min="0" max="100" class="w4"></label>
-  </section>
-
-  <section class="card">
-    <h2>Matching model</h2>
+    <h3>Matching engine</h3>
     <label class="row">Engine
       <select name="engine">
         <option value="local" {% if s.matching.engine == 'local' %}selected{% endif %}>Local (free, offline)</option>
@@ -48,26 +77,14 @@
     <label class="row">Spend cap per run (USD) <input type="number" step="0.01" min="0" name="claude_spend_cap_usd" value="{{ s.matching.claude_spend_cap_usd }}" class="w6"></label>
     <label class="row">Max jobs per Claude run <input type="number" min="1" name="claude_max_jobs_per_run" value="{{ s.matching.claude_max_jobs_per_run }}" class="w6"></label>
     <label class="row">Parallel Claude requests <input type="number" min="1" max="16" name="claude_concurrency" value="{{ s.matching.claude_concurrency }}" class="w4"></label>
-    <label class="row">Descriptions to fetch per <code>enrich</code> <input type="number" min="0" name="enrich_per_run" value="{{ s.matching.enrich_per_run }}" class="w6"></label>
-  </section>
+    <label class="row">Descriptions to fetch per run <input type="number" min="0" name="enrich_per_run" value="{{ s.matching.enrich_per_run }}" class="w6"></label>
 
-  <section class="card">
-    <h2>Rate limits</h2>
+    <h3>Politeness</h3>
     <label class="row">Seconds between requests to the same site <input type="number" step="0.1" min="0.5" name="min_seconds_between_requests" value="{{ s.min_seconds_between_requests }}" class="w6">
       <span class="muted small">at least 0.5; a site's robots.txt Crawl-delay wins if it's longer</span></label>
     <label class="row">Request timeout (seconds) <input type="number" step="1" min="1" max="300" name="request_timeout_seconds" value="{{ s.request_timeout_seconds }}" class="w6"></label>
     <label class="block">User agent <input name="user_agent" value="{{ s.user_agent }}"></label>
-  </section>
-
-  <section class="card">
-    <h2>Follow-ups</h2>
-    <p class="muted small">When a quiet application shows up as due on the Applied page. JobPilot only drafts the
-      message; you send it yourself.</p>
-    <label class="row">First follow-up after <input type="number" min="1" max="60" name="fu_first" value="{{ s.followups.first_after_days }}" class="w4"> days</label>
-    <label class="row">Then every <input type="number" min="1" max="60" name="fu_every" value="{{ s.followups.then_every_days }}" class="w4"> days, at most
-      <input type="number" min="0" max="5" name="fu_max" value="{{ s.followups.max_followups }}" class="w4"> follow-ups</label>
-    <label class="row">Suggest "No response" after <input type="number" min="7" max="180" name="fu_quiet" value="{{ s.followups.quiet_after_days }}" class="w4"> days</label>
-  </section>
+  </details>
 
   <div class="btns"><button class="btn primary">Save settings</button></div>
 </form>

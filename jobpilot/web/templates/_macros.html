@@ -29,12 +29,16 @@
 <form class="filters" method="get" action="{{ action }}" data-autosubmit>
   {% for k in ('show', 'region') %}{% if f.get(k) %}<input type="hidden" name="{{ k }}" value="{{ f[k] }}">{% endif %}{% endfor %}
   <input type="search" name="q" value="{{ f.q }}" placeholder="Search title, company or city" aria-label="Search">
-  {{ place_select(f, facets) }}
-  <select name="field" aria-label="Field"><option value="">Any field</option>
-    {% for x in fields %}<option value="{{ x }}" {% if f.field == x %}selected{% endif %}>{{ x|capitalize }}</option>{% endfor %}</select>
-  <select name="type" aria-label="Type"><option value="">Any type</option>
-    {% for t in types %}<option {% if f.type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select>
-  {{ extra }}
+  {% set any_more = f.area or f.field or f.type or f.get('status') or f.get('min_score') or f.get('described') %}
+  <details class="more-filters" {% if any_more %}open{% endif %}>
+    <summary>Filters{% if any_more %} (on){% endif %}</summary>
+    {{ place_select(f, facets) }}
+    <select name="field" aria-label="Field"><option value="">Any field</option>
+      {% for x in fields %}<option value="{{ x }}" {% if f.field == x %}selected{% endif %}>{{ x|capitalize }}</option>{% endfor %}</select>
+    <select name="type" aria-label="Type"><option value="">Any type</option>
+      {% for t in types %}<option {% if f.type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select>
+    {{ extra }}
+  </details>
   <select name="sort" aria-label="Sort">
     <option value="score" {% if f.sort == 'score' %}selected{% endif %}>Best match</option>
     <option value="date" {% if f.sort == 'date' %}selected{% endif %}>Newest</option>

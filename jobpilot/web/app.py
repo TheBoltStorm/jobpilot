@@ -16,7 +16,7 @@ from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
@@ -27,7 +27,7 @@ from jobpilot.forms import FORM_ATS
 from jobpilot.core import db
 from jobpilot.onboarding.profile import load_profile
 from jobpilot.matching.skills import load_taxonomy
-from jobpilot.review import export, outcomes, plan, tailor
+from jobpilot.review import export, outcomes, pagefill, plan, tailor
 from jobpilot.review.status import LABELS, PRE_APPROVAL, STATUSES, GateError
 from jobpilot.settings import Settings, load_settings, save_settings
 
@@ -51,6 +51,10 @@ MESSAGES = {
     "tailored": "Suggested a tailored order. Check the changes under Tailored resume.",
     "tailor_approved": "Created the tailored resume and picked it for this application.",
     "tailor_discarded": "Discarded the tailored version.",
+    "added": "Added. Check the answers below, then approve when they look right.",
+    "already": "You already had this job. Here it is.",
+    "filling": ("A browser window is opening with the form. JobPilot fills what you approved and stops on the "
+                "last page. You check it and click Submit yourself."),
 }
 
 
@@ -61,6 +65,8 @@ def create_app(paths: Paths) -> FastAPI:
     templates = Jinja2Templates(directory=HERE / "templates")
     token = secrets.token_urlsafe(32)
     app.state.csrf_token = token
+    app.state.filling = set()  # job ids with a fill running in a browser window
+    app.state.fill_errors = {}  # job id -> last error from a dashboard-started fill
     t_env = templates.env
     t_env.globals.update(STATUSES=STATUSES, LABELS=LABELS, csrf=token)
     t_env.filters["label"] = lambda s: LABELS.get(s, s)
@@ -209,10 +215,15 @@ def create_app(paths: Paths) -> FastAPI:
                    WHERE j.status IN ('found','matched','ready_to_fill','needs_human') GROUP BY q.status""").fetchall())
             with conn:
                 outcomes.ensure(conn)
-            due_n = len(outcomes.due(conn, outcomes.FollowupRules.from_settings(settings())))
+            due = outcomes.due(conn, outcomes.FollowupRules.from_settings(settings()))
             responded = conn.execute("SELECT COUNT(*) FROM outcomes WHERE responded_at IS NOT NULL").fetchone()[0]
-        return render(request, "board.html", due_n=due_n, responded=responded, counts=counts, total=sum(counts.values()), queue=queue, recent=recent,
-                      undescribed=undescribed, qualify=qualify, qual_counts=qual_counts)
+            to_submit = conn.execute(
+                """SELECT j.id, j.title, j.company, j.status, j.ats FROM jobs j
+                   WHERE j.status IN ('approved', 'filled') ORDER BY j.id DESC LIMIT 8""").fetchall()
+        return render(request, "board.html", due=due[:5], due_n=len(due), responded=responded, counts=counts,
+                      total=sum(counts.values()), queue=queue, recent=recent, undescribed=undescribed,
+                      qualify=qualify, qual_counts=qual_counts, to_submit=to_submit,
+                      review_n=sum(counts.get(s, 0) for s in plan.QUEUE_STATUSES))
 
     @app.post("/prepare")
     async def prepare_all(request: Request):
@@ -276,23 +287,198 @@ def create_app(paths: Paths) -> FastAPI:
 
     # ------------------------------------------------------------ jobs list
 
-    @app.get("/jobs", response_class=HTMLResponse)
-    def jobs(request: Request, status: str = "", q: str = "", field: str = "", type: str = "", min_score: str = "",
-             described: str = "", region: str = "", area: str = "", sort: str = "score", page: int = 1):
-        f = {"status": status, "q": q, "field": field, "type": type, "min_score": min_score, "described": described,
-             "region": region, "area": area, "sort": sort if sort in SORTS else "score"}
-        return list_page(request, "jobs.html", "/jobs", f, page=page)
+    OPEN_TO_APPLY = "j.status IN ('found', 'matched', 'ready_to_fill', 'needs_human', 'custom_site', 'account_wall')"
 
-    @app.get("/qualify", response_class=HTMLResponse)
-    def qualify_page(request: Request, show: str = "qualify", q: str = "", field: str = "", type: str = "",
-                     region: str = "", area: str = "", sort: str = "score", page: int = 1):
-        show = show if show in ("qualify", "close") else "qualify"
-        f = {"show": show, "q": q, "field": field, "type": type, "region": region, "area": area,
+    @app.get("/jobs", response_class=HTMLResponse)
+    def jobs(request: Request, show: str = "", status: str = "", q: str = "", field: str = "", type: str = "",
+             min_score: str = "", described: str = "", region: str = "", area: str = "", sort: str = "score",
+             page: int = 1):
+        if show not in ("qualify", "close", "all"):
+            # First visit: start on the jobs you qualify for, if there are any.
+            with db.connect(paths.db) as conn:
+                refresh_indexes(conn)
+                n = conn.execute(f"""SELECT COUNT(*) FROM qualifications q JOIN jobs j ON j.id = q.job_id
+                                     WHERE q.status = 'qualify' AND {OPEN_TO_APPLY}""").fetchone()[0]
+            show = "qualify" if n and not (status or q or field or type or min_score or region or area) else "all"
+        f = {"show": show, "status": status if show == "all" else "", "q": q, "field": field, "type": type,
+             "min_score": min_score, "described": described, "region": region, "area": area,
              "sort": sort if sort in SORTS else "score"}
-        # `show` is one of two fixed words (checked above), so it's safe in the SQL text.
-        # Only jobs you could still apply to: not already approved, filled, submitted, rejected or closed.
-        extra = f"q.status = '{show}' AND j.status IN ('found', 'matched', 'ready_to_fill', 'needs_human')"
-        return list_page(request, "qualify.html", "/qualify", f, extra_where=extra, page=page)
+        # `show` is one of two fixed words here (checked above), so it's safe in the SQL text.
+        extra = f"q.status = '{show}' AND {OPEN_TO_APPLY}" if show in ("qualify", "close") else ""
+        return list_page(request, "jobs.html", "/jobs", f, extra_where=extra, page=page)
+
+    @app.get("/qualify")
+    def qualify_page(request: Request):
+        qs = dict(request.query_params)
+        qs["show"] = qs.get("show") if qs.get("show") in ("qualify", "close") else "qualify"
+        return RedirectResponse("/jobs?" + urlencode(qs), status_code=303)
+
+    # ------------------------------------------------------------ apply: everything waiting on you
+
+    @app.get("/apply", response_class=HTMLResponse)
+    def apply_page(request: Request):
+        with db.connect(paths.db) as conn:
+            rows = conn.execute(
+                f"""SELECT j.id, j.title, j.company, j.status, j.ats, m.score, a.skipped_at FROM jobs j
+                    LEFT JOIN matches m ON m.job_id = j.id LEFT JOIN applications a ON a.job_id = j.id
+                    WHERE j.status IN ({','.join('?' * len(plan.QUEUE_STATUSES))}, 'approved', 'filled')
+                    ORDER BY a.skipped_at IS NOT NULL, m.score DESC, j.id""", plan.QUEUE_STATUSES).fetchall()
+        groups = [
+            ("Fill and submit", "You approved these. Fill the form, check it, and click Submit on the site yourself.",
+             [r for r in rows if r["status"] in ("approved", "filled")]),
+            ("Answer a few questions", "Some questions only you can answer.",
+             [r for r in rows if r["status"] in ("needs_human", "account_wall")]),
+            ("Ready for your OK", "JobPilot has an answer for every question. Check them and approve.",
+             [r for r in rows if r["status"] in ("ready_to_fill", "matched", "custom_site")]),
+        ]
+        return render(request, "apply.html", groups=groups, total=len(rows))
+
+    # ------------------------------------------------------------ add a job from a link
+
+    @app.get("/add", response_class=HTMLResponse)
+    def add_page(request: Request, url: str = ""):
+        return render(request, "add.html", f={"url": url}, manual=False)
+
+    def _http():
+        from jobpilot.core.http import PoliteClient
+
+        s = settings()
+        return PoliteClient(s.user_agent, s.min_seconds_between_requests, s.request_timeout_seconds)
+
+    def _gh_tokens() -> dict[str, str]:
+        from jobpilot.sources.companies import load_companies
+        from jobpilot.sources.dedupe import company_key
+
+        return {company_key(c.name): c.token for c in load_companies(paths.companies) if c.ats == "greenhouse"}
+
+    def add_job(conn, url: str, **typed) -> tuple[int, bool]:
+        """Store a job from a link, score it, plan its answers and load the real form when we can."""
+        from jobpilot.matching.engine import score_one
+        from jobpilot.sources.link import add_link
+
+        http = _http()
+        try:
+            with conn:
+                job_id, new = add_link(conn, http, url, gh_tokens=_gh_tokens(), **typed)
+            profile = load_profile(paths.profile)
+            if new and profile is not None:
+                with conn:
+                    score_one(conn, job_id, profile, load_taxonomy(paths.home / "skills.yaml"),
+                              settings().matching.min_score)
+                    plan.prepare(conn, job_id, profile)
+                job = conn.execute("SELECT ats FROM jobs WHERE id = ?", (job_id,)).fetchone()
+                if job["ats"] in FORM_ATS:
+                    try:
+                        with conn:
+                            plan.load_real_form(conn, job_id, profile, http, _gh_tokens())
+                    except GateError:
+                        pass  # the standard fields still work; the job page offers to retry
+        finally:
+            http.close()
+        return job_id, new
+
+    @app.post("/add")
+    async def add_post(request: Request):
+        from jobpilot.sources.link import LinkError
+
+        form = await posted(request)
+        f = {k: str(form.get(k, "")).strip() for k in ("url", "title", "company", "location")}
+        with db.connect(paths.db) as conn:
+            try:
+                job_id, new = add_job(conn, f["url"], title=f["title"], company=f["company"], location=f["location"])
+            except LinkError as exc:
+                return render(request, "add.html", status_code=400, f=f, error=str(exc),
+                              manual="title and company" in str(exc).lower() or bool(f["title"]))
+        return go(f"/jobs/{job_id}", "added" if new else "already")
+
+    # ------------------------------------------------------------ browser button (extension) API
+    #
+    # The browser button calls these with its pairing key. Websites can't: they don't have the
+    # key, and the dashboard sends no CORS headers, so a page can't read anything back either.
+
+    def ext_check(request: Request) -> None:
+        origin = request.headers.get("origin", "")
+        if origin.startswith(("http://", "https://")) and urlparse(origin).hostname not in LOCAL_HOSTS:
+            raise HTTPException(403, "Request came from a website.")
+        key = request.headers.get("x-jobpilot-key", "")
+        if not secrets.compare_digest(key, pagefill.extension_key(paths.home)):
+            raise HTTPException(401, "Wrong key. Copy it again from JobPilot → Settings → Browser button.")
+
+    async def ext_json(request: Request) -> dict:
+        ext_check(request)
+        try:
+            data = await request.json()
+        except ValueError:
+            raise HTTPException(400, "Expected JSON.") from None
+        if not isinstance(data, dict):
+            raise HTTPException(400, "Expected a JSON object.")
+        return data
+
+    @app.get("/api/ext/hello")
+    def ext_hello(request: Request):
+        ext_check(request)
+        return {"ok": True, "profile": paths.profile.is_file()}
+
+    @app.post("/api/ext/plan")
+    async def ext_plan(request: Request):
+        data = await ext_json(request)
+        profile = load_profile(paths.profile)
+        if profile is None:
+            return JSONResponse({"refused": "No profile yet. Run `jobpilot onboard` first.", "fields": [], "job": None})
+        fields = [f for f in data.get("fields") or [] if isinstance(f, dict)]
+        with db.connect(paths.db) as conn:
+            return pagefill.plan_page(conn, profile, str(data.get("url", ""))[:2000], str(data.get("title", "")), fields)
+
+    @app.post("/api/ext/job")
+    async def ext_job(request: Request):
+        from jobpilot.sources.link import LinkError
+
+        data = await ext_json(request)
+        with db.connect(paths.db) as conn:
+            try:
+                job_id, new = add_job(conn, str(data.get("url", "")), title=str(data.get("title", ""))[:300],
+                                      company=str(data.get("company", ""))[:200],
+                                      location=str(data.get("location", ""))[:200],
+                                      description=str(data.get("description", ""))[:60000])
+            except LinkError as exc:
+                return JSONResponse({"error": str(exc)}, status_code=400)
+        return {"job_id": job_id, "new": new, "path": f"/jobs/{job_id}"}
+
+    @app.post("/api/ext/filled")
+    async def ext_filled(request: Request):
+        data = await ext_json(request)
+        with db.connect(paths.db) as conn:
+            with conn:
+                job_id = pagefill.record_fill(conn, str(data.get("url", ""))[:2000], int(data.get("filled", 0) or 0),
+                                              int(data.get("left", 0) or 0))
+        return {"job_id": job_id}
+
+    def start_fill(job_id: int) -> None:
+        """Open the form in a visible browser and fill it from your approval, in the background."""
+        import threading
+
+        from jobpilot.autofill import run_autofill
+
+        if job_id in app.state.filling:
+            raise GateError("A browser window is already filling this form.")
+        with db.connect(paths.db) as conn:
+            from jobpilot.autofill import plan_run
+
+            plan_run(conn, job_id, "fill")  # gate check now, so you see a refusal right away
+        app.state.filling.add(job_id)
+        app.state.fill_errors.pop(job_id, None)
+        s = settings()
+
+        def work():
+            try:
+                run_autofill(paths, job_id, "fill", profile=load_profile(paths.profile),
+                             channel=s.autofill.browser_channel, slow_mo_ms=s.autofill.slow_mo_ms, log=lambda m: None)
+            except Exception as exc:  # shown on the job's page
+                app.state.fill_errors[job_id] = str(exc).splitlines()[0][:300] if str(exc) else type(exc).__name__
+            finally:
+                app.state.filling.discard(job_id)
+
+        threading.Thread(target=work, daemon=True, name=f"fill-{job_id}").start()
 
     # ------------------------------------------------------------ review page
 
@@ -330,7 +516,8 @@ def create_app(paths: Paths) -> FastAPI:
         return dict(outcome=outcome, outcome_draft=draft_, STAGES=outcomes.STAGES, BY_KEY=outcomes.BY_KEY,
                     qual=minimums.load(conn, job_id), job_areas=job_areas, tailored=tailored, tailor_moves=tailor.moves(tailored), job=job, match=match, skills=grouped, app=app_, events=events, sources=sources,
                     resumes=resumes, next_id=nxt, editable=job["status"] in (*PRE_APPROVAL, "approved", "filled"),
-                    form=form_row, can_load_form=job["ats"] in FORM_ATS, run=run, run_steps=run_steps)
+                    form=form_row, can_load_form=job["ats"] in FORM_ATS, can_fill=job["ats"] in FORM_ATS, run=run,
+                    run_steps=run_steps)
 
     def load_form_for(conn, job_id: int, profile) -> None:
         from jobpilot.core.http import PoliteClient
@@ -352,7 +539,8 @@ def create_app(paths: Paths) -> FastAPI:
         with db.connect(paths.db) as conn:
             with conn:
                 ctx = job_context(conn, job_id, profile)
-        return render(request, "job.html", **ctx)
+        return render(request, "job.html", filling=job_id in app.state.filling,
+                      fill_error=app.state.fill_errors.get(job_id, ""), **ctx)
 
     @app.get("/review")
     def review_next():
@@ -429,6 +617,9 @@ def create_app(paths: Paths) -> FastAPI:
                             raise GateError("Tick the box to confirm you clicked Submit on the site yourself.")
                         plan.mark_submitted(conn, job_id)
                         return go(f"/jobs/{job_id}", "submitted")
+                    if action == "fill":
+                        start_fill(job_id)
+                        return go(f"/jobs/{job_id}", "filling")
                     if action == "reopen":
                         plan.reopen(conn, job_id, profile, settings().matching.min_score)
                         return go(f"/jobs/{job_id}", "reopened")
@@ -438,7 +629,8 @@ def create_app(paths: Paths) -> FastAPI:
             except GateError as exc:
                 ctx = job_context(conn, job_id, profile)
                 conn.commit()
-                return render(request, "job.html", status_code=400, error=str(exc), **ctx)
+                return render(request, "job.html", status_code=400, error=str(exc), filling=False,
+                              fill_error="", **ctx)
 
     # ------------------------------------------------------------ gaps
 
@@ -486,10 +678,16 @@ def create_app(paths: Paths) -> FastAPI:
 
     # ------------------------------------------------------------ settings
 
+    def settings_ctx() -> dict:
+        return dict(has_key=bool(os.environ.get("ANTHROPIC_API_KEY")), has_usajobs=bool(os.environ.get("USAJOBS_API_KEY")),
+                    path=paths.settings, ext_key=pagefill.extension_key(paths.home),
+                    ext_dir=Path(__file__).resolve().parents[2] / "extension", base_url="http://127.0.0.1:8765")
+
     @app.get("/settings", response_class=HTMLResponse)
     def settings_page(request: Request):
-        return render(request, "settings.html", s=settings(), has_key=bool(os.environ.get("ANTHROPIC_API_KEY")),
-                      has_usajobs=bool(os.environ.get("USAJOBS_API_KEY")), path=paths.settings)
+        ctx = settings_ctx()
+        ctx["base_url"] = f"{request.url.scheme}://{request.url.netloc}"
+        return render(request, "settings.html", s=settings(), **ctx)
 
     @app.post("/settings")
     async def settings_save(request: Request):
@@ -498,9 +696,7 @@ def create_app(paths: Paths) -> FastAPI:
         try:
             new = settings_from_form(current, form)
         except (ValidationError, ValueError) as exc:
-            return render(request, "settings.html", status_code=400, s=current, error=_friendly(exc),
-                          has_key=bool(os.environ.get("ANTHROPIC_API_KEY")),
-                          has_usajobs=bool(os.environ.get("USAJOBS_API_KEY")), path=paths.settings)
+            return render(request, "settings.html", status_code=400, s=current, error=_friendly(exc), **settings_ctx())
         save_settings(new, paths.settings)
         return go("/settings", "settings")
 

@@ -73,6 +73,23 @@ def save_match(conn: sqlite3.Connection, job: sqlite3.Row, result: MatchResult, 
     return new_status == "matched" and job["status"] in RECLASSIFY
 
 
+def score_one(conn: sqlite3.Connection, job_id: int, profile: Profile, tax: Taxonomy, min_score: int) -> int:
+    """Score one job now (e.g. one you just added). A job you added stays on your list whatever its score."""
+    job = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    result = score_job(job, profile, tax)
+    phash = profile_hash(profile)
+    conn.execute(
+        """INSERT INTO matches (job_id, score, confidence, reason, tags, skills_json, engine, profile_hash,
+                                description_len, scored_at)
+           VALUES (?, ?, ?, ?, ?, ?, 'local', ?, ?, ?)
+           ON CONFLICT(job_id) DO UPDATE SET score=excluded.score, confidence=excluded.confidence,
+             reason=excluded.reason, tags=excluded.tags, skills_json=excluded.skills_json, engine=excluded.engine,
+             profile_hash=excluded.profile_hash, description_len=excluded.description_len, scored_at=excluded.scored_at""",
+        (job_id, result.score, result.confidence, result.reason, ",".join(result.tags),
+         json.dumps(result.skills_json()), phash, len(job["description"] or ""), now_iso()))
+    return result.score
+
+
 def run_local(conn: sqlite3.Connection, profile: Profile, tax: Taxonomy, min_score: int,
               rescore: bool = False, limit: int | None = None, log: Callable[[str], None] = print) -> MatchSummary:
     phash = profile_hash(profile)

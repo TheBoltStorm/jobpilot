@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>JobPilot</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header><b>JobPilot</b> <span id="status" class="muted">connecting…</span></header>
+
+  <section id="setup" hidden>
+    <p>Paste the key from <b>JobPilot → Settings → Browser button</b>.</p>
+    <label>Key <input id="key" autocomplete="off" spellcheck="false"></label>
+    <label>Dashboard address <input id="base" value="http://127.0.0.1:8765"></label>
+    <button id="save-setup" class="primary">Connect</button>
+    <p class="muted small">Start the dashboard first: <code>jobpilot dashboard</code></p>
+  </section>
+
+  <section id="main" hidden>
+    <p id="page-title" class="clip"></p>
+    <div class="row">
+      <button id="scan" class="primary">Fill this page</button>
+      <button id="save-job">Save this job</button>
+    </div>
+    <div id="msg" role="status"></div>
+
+    <div id="plan" hidden>
+      <p id="plan-head" class="small"></p>
+      <ul id="fields"></ul>
+      <button id="fill" class="primary">Fill ticked fields</button>
+      <p class="muted small">Green = filled, orange = for you. Check the whole page, then click Submit yourself.</p>
+    </div>
+
+    <form id="job-form" hidden>
+      <label>Job title <input id="j-title" required></label>
+      <label>Company <input id="j-company" required></label>
+      <button class="primary">Save to JobPilot</button>
+    </form>
+  </section>
+
+  <footer class="muted small">JobPilot never submits. <a href="#" id="change-key">Change key</a></footer>
+  <script src="popup.js"></script>
+</body>
+</html>

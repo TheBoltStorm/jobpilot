@@ -9,7 +9,7 @@ Commands are shown for Windows (PowerShell), with macOS/Linux versions where the
 |---|---|---|
 | **Python 3.11 or newer** | JobPilot is a Python program | [python.org/downloads](https://www.python.org/downloads/). On Windows, tick **"Add python.exe to PATH"** in the installer. |
 | **Git** (optional) | To download and update the code | [git-scm.com](https://git-scm.com/downloads). You can use a ZIP download instead. |
-| **Microsoft Edge or Google Chrome** | Autofill drives a real browser window | Edge is already on Windows. |
+| **Microsoft Edge or Google Chrome** | Autofill opens forms in it, and the browser button runs in it | Edge is already on Windows. |
 | **Your resume** as PDF or DOCX | JobPilot builds your profile from it | No resume? It can make a fictional sample one. |
 
 You don't need an API key. Everything runs free and offline on your computer, except fetching job listings.
@@ -126,35 +126,56 @@ terminal to stop it.
 
 | Page | What it's for |
 |---|---|
-| **Board** | Your overview: what's waiting, jobs you qualify for, follow-ups due. |
-| **Jobs** | Every job, filterable by status, score, field, region and area. |
-| **You qualify** | Jobs where you meet every minimum requirement, or are one short. |
-| **Review** | Go through prepared applications one at a time. |
+| **Home** | What to do next: applications to review or submit, follow-ups due, and good fits. Paste a job link here to add it. |
+| **Find jobs** | Tabs for jobs **you qualify** for, ones you're **almost** qualified for, **all jobs**, and **skills to learn**. Search, pick a region, or open **Filters** for more. |
+| **Apply** | Everything waiting on you, grouped by what it needs: your answers, your OK, or your Submit click. |
 | **Applied** | Applications you've submitted, their stages, follow-up drafts and stats. |
-| **Skill gaps** | Skills that matching jobs ask for and you don't show yet, with how to learn them. |
-| **Settings** | Rate limits, posting age, follow-up timing and more. |
+| **Settings** | Which jobs you see, follow-up timing, and the browser button. Sources, the matching engine and rate limits are under **Advanced settings**. |
+
+**+ Add a job** (top right) takes a link to any posting you found. Greenhouse, Lever and Ashby postings
+are read automatically; for other sites you type the title and company. The job goes straight to **Apply**.
+From a terminal: `jobpilot add https://...`
 
 ## 7. Apply to a job
 
-1. **Review.** On **Review**, check every answer. Fields marked **NEEDS_HUMAN** are yours to answer:
+1. **Review.** Open **Apply** and click **Review**. Fields marked **NEEDS_HUMAN** are yours to answer:
    work authorization, sponsorship, salary, demographic questions, legal consent, and anything
    JobPilot couldn't find in your profile. It never fills those from defaults. Edit anything, then click
    **Approve** (or **Skip** / **Reject**).
 2. **Optional: tailor your resume.** On the job's page, **Suggest a tailored version** reorders your
    real content so the most relevant parts come first. Nothing is invented. Approve it to create a DOCX.
-3. **Fill the form.** In the terminal:
-
-   ```bash
-   jobpilot autofill 123           # dry run first: shows what it would fill, types nothing
-   jobpilot autofill 123 --fill    # opens the application in Edge and fills your approved answers
-   ```
-
-   (`123` is the job's number, shown in its page address and in `jobpilot jobs list`.)
-   Autofill only works on Greenhouse and Lever forms. For other sites, the job page links to the posting and
-   you apply there yourself.
+3. **Fill the form.**
+   - **Greenhouse and Lever jobs:** click **Fill the form for me**. A browser window opens with the form
+     and JobPilot fills exactly what you approved.
+   - **Any other site:** click **Open the application**, then click the **JobPilot browser button**
+     (set it up once, below).
 4. **You submit.** JobPilot stops on the last page. Look it over, then click **Submit** on the site
    yourself. JobPilot can't submit for you, and there's no setting to make it.
-5. **Mark it.** Back on the job's page in the dashboard, click **Mark as submitted**. It now shows on **Applied**.
+5. **Mark it.** Back on the job's page in the dashboard, tick the box and click **Mark as submitted**.
+   It now shows on **Applied**.
+
+## The browser button (fill forms on any site)
+
+The browser button is a small Edge/Chrome extension that comes with JobPilot. On any application page you
+have open, it reads the form, asks the dashboard on your computer what it can fill, and shows you every
+value. It fills only what you tick, outlines what's left for you in orange, and never submits.
+It also has **Save this job**, which adds the posting you're looking at to JobPilot.
+
+Set it up once:
+
+1. Start the dashboard (`jobpilot dashboard`) and open **Settings → Browser button**.
+2. In Edge go to `edge://extensions` (Chrome: `chrome://extensions`) and turn on **Developer mode**.
+3. Click **Load unpacked** and choose the `extension` folder inside your `jobpilot` folder.
+4. Click the puzzle-piece icon in the toolbar and pin **JobPilot**.
+5. Click the JobPilot button, paste the key from Settings, and click **Connect**.
+
+Then, on an application form: click the button → **Fill this page** → check the list → **Fill ticked fields**.
+
+What it won't do: fill sign-in or sign-up pages, create accounts, solve CAPTCHAs, attach files, or answer
+questions only you can answer (work authorization, sponsorship, salary, EEO, background checks, legal
+consent). If you answered one of those on the job's page in JobPilot, it reuses that answer for that job,
+except legal or consent questions, which you always tick yourself. Written DRAFT answers start unticked.
+The dashboard must be running for the button to work.
 
 ## 8. After you apply
 
@@ -197,6 +218,8 @@ Your data is upgraded automatically the next time you run any command.
 | `python` is not recognized | Reinstall Python with "Add to PATH" ticked, or use `py` instead. |
 | Autofill says the browser didn't start | Install Edge or Chrome, or set `autofill.browser_channel` in `data/settings.yaml` (`msedge`, `chrome`, or `chromium`; for `chromium` run `python -m playwright install chromium`). |
 | Autofill stops on a CAPTCHA or sign-in page | That's on purpose. Finish that step yourself in the open browser window. |
+| The browser button says it can't reach JobPilot | Start the dashboard (`jobpilot dashboard`) and keep it running. |
+| The browser button finds no fields | Some forms load inside a frame from another site. Open the form's own page (often an "Apply" link) and try again. |
 | Odd characters in the terminal on Windows | Run `$env:PYTHONIOENCODING="utf-8"` first. |
 | Port 8765 is busy | `jobpilot dashboard --port 8800` |
 | Anything else | `jobpilot doctor` checks your setup and says what to fix. |

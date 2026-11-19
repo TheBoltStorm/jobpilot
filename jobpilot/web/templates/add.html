@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Add a job{% endblock %}
+{% block content %}
+<div class="narrow">
+<h1>Add a job</h1>
+<p class="muted">Paste the link to a job posting you found. For Greenhouse, Lever and Ashby postings JobPilot reads
+  the details itself. For other sites, type the title and company.</p>
+
+<form method="post" action="/add" class="card">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label class="block">Link to the posting
+    <input name="url" type="url" value="{{ f.url }}" placeholder="https://..." required autofocus></label>
+  <details {% if manual %}open{% endif %}>
+    <summary class="small">Job title and company{% if not manual %} (only needed for other sites){% endif %}</summary>
+    <label class="block">Job title <input name="title" value="{{ f.title }}"></label>
+    <label class="block">Company <input name="company" value="{{ f.company }}"></label>
+    <label class="block">Location <span class="muted small">(optional)</span> <input name="location" value="{{ f.location }}"></label>
+  </details>
+  <div class="btns"><button class="btn primary">Add job</button>
+    <span class="muted small">It goes straight to your Apply list. Nothing is filled or sent.</span></div>
+</form>
+
+<p class="muted small">Looking at the posting right now? The <a href="/settings#browser-button">browser button</a>
+  can save it with one click, and fill its application form.</p>
+</div>
+{% endblock %}

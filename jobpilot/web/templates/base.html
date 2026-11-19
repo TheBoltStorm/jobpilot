@@ -12,15 +12,13 @@
   <a class="brand" href="/">JobPilot</a>
   <nav>
     {% set here = request.url.path %}
-    <a href="/" {% if here == '/' %}aria-current="page"{% endif %}>Board</a>
-    <a href="/review" {% if here.startswith('/jobs/') %}aria-current="page"{% endif %}>Review</a>
-    <a href="/jobs" {% if here == '/jobs' %}aria-current="page"{% endif %}>Jobs</a>
-    <a href="/qualify" {% if here == '/qualify' %}aria-current="page"{% endif %}>You qualify</a>
+    <a href="/" {% if here == '/' %}aria-current="page"{% endif %}>Home</a>
+    <a href="/jobs" {% if here in ('/jobs', '/gaps') %}aria-current="page"{% endif %}>Find jobs</a>
+    <a href="/apply" {% if here == '/apply' or here.startswith('/jobs/') %}aria-current="page"{% endif %}>Apply</a>
     <a href="/applied" {% if here == '/applied' %}aria-current="page"{% endif %}>Applied</a>
-    <a href="/gaps" {% if here == '/gaps' %}aria-current="page"{% endif %}>Skill gaps</a>
-    <a href="/runs" {% if here == '/runs' %}aria-current="page"{% endif %}>Runs</a>
-    <a href="/settings" {% if here == '/settings' %}aria-current="page"{% endif %}>Settings</a>
+    <a href="/settings" {% if here in ('/settings', '/runs') %}aria-current="page"{% endif %}>Settings</a>
   </nav>
+  <a class="btn primary small-btn add-btn" href="/add">+ Add a job</a>
 </header>
 <main>
   {% if profile_missing %}<div class="banner warn">No profile yet. Run <code>jobpilot onboard</code> in a terminal, then reload.</div>{% endif %}

@@ -1,0 +1,30 @@
+:root { --bg: #fff; --text: #1b1e23; --muted: #626a75; --line: #e1e4e8; --accent: #2357c6; --ok: #1a7343;
+  --warn: #8a5a00; --warn-bg: #fff3d4; --err: #b42318; color-scheme: light dark; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #1b1e24; --text: #e6e8eb; --muted: #98a0ab; --line: #2c3139; --accent: #7aa2ff; --ok: #6fd39b;
+    --warn: #f2c45a; --warn-bg: #33290f; --err: #ff8a80; }
+}
+body { width: 360px; margin: 0; padding: 10px 12px; font: 13px/1.4 system-ui, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+header { display: flex; gap: 8px; align-items: baseline; margin-bottom: 8px; }
+footer { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 6px; display: flex; justify-content: space-between; }
+a { color: var(--accent); }
+.muted { color: var(--muted); } .small { font-size: 12px; }
+.clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; margin: 0 0 6px; }
+.row { display: flex; gap: 6px; }
+label { display: block; margin: 6px 0; }
+input { width: 100%; box-sizing: border-box; font: inherit; padding: 4px 6px; border: 1px solid var(--line); border-radius: 5px;
+  background: var(--bg); color: var(--text); }
+button { font: inherit; padding: 5px 10px; border-radius: 5px; border: 1px solid var(--line); background: var(--bg);
+  color: var(--text); cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+button:disabled { opacity: .5; cursor: default; }
+#msg { margin: 8px 0; }
+#msg.err { color: var(--err); } #msg.ok { color: var(--ok); }
+#fields { list-style: none; padding: 0; margin: 6px 0; max-height: 330px; overflow: auto; border: 1px solid var(--line); border-radius: 5px; }
+#fields li { display: flex; gap: 6px; padding: 5px 6px; border-bottom: 1px solid var(--line); align-items: flex-start; }
+#fields li:last-child { border-bottom: 0; }
+#fields input[type=checkbox] { width: auto; margin-top: 2px; }
+#fields .q { flex: 1; min-width: 0; }
+#fields .v { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+#fields .need .v { color: var(--warn); }
+.tag { font-size: 10px; font-weight: 700; padding: 0 4px; border-radius: 3px; background: var(--warn-bg); color: var(--warn); }

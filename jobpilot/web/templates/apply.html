@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Apply{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Apply</h1>
+  <span class="sub">{{ total }} applications waiting on you</span>
+  {% if total %}<span class="right"><a class="btn primary small-btn" href="/review">Review the next one</a></span>{% endif %}
+</div>
+
+<ol class="steps-how">
+  <li><b>Review.</b> Check JobPilot's answers and fill in the ones only you can give.</li>
+  <li><b>Approve.</b> Nothing is typed into a form until you do.</li>
+  <li><b>Fill.</b> JobPilot opens the form and fills it, or use the browser button on any site.</li>
+  <li><b>You submit.</b> Check the form and click Submit on the site yourself.</li>
+</ol>
+
+{% for title, hint, rows in groups if rows %}
+<section class="card">
+  <div class="card-head"><h2>{{ title }} <span class="muted">{{ rows|length }}</span></h2><span class="muted small">{{ hint }}</span></div>
+  <ul class="list">
+    {% for r in rows %}
+    <li><span class="score sc-{{ (r.score or 0) // 25 }}">{{ r.score if r.score is not none else '–' }}</span>
+      <span class="grow clip"><a href="/jobs/{{ r.id }}">{{ r.title }}</a> <span class="muted">· {{ r.company }}</span></span>
+      {% if r.skipped_at %}<span class="tag">skipped</span>{% endif %}
+      <span class="pill s-{{ r.status }}">{{ r.status|label }}</span>
+      <a class="btn small-btn" href="/jobs/{{ r.id }}">{{ 'Open' if r.status in ('approved', 'filled') else 'Review' }}</a></li>
+    {% endfor %}
+  </ul>
+</section>
+{% else %}
+<section class="card">
+  <p class="muted">Nothing waiting. <a href="/jobs">Find jobs</a> to apply to, or <a href="/add">add one from a link</a>.</p>
+</section>
+{% endfor %}
+
+<section class="card">
+  <h2>Applying on another site?</h2>
+  <p class="small">Open the application in Edge or Chrome and click the <b>JobPilot button</b> in the toolbar.
+    It shows what it would fill from your profile, fills only after you click, and never submits.
+    <a href="/settings#browser-button">Set up the browser button</a>.</p>
+</section>
+{% endblock %}

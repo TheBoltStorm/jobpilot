@@ -1,0 +1,26 @@
+<!doctype html>
+<html><head><title>Apply: Data Intern at Example Co</title></head>
+<body>
+<h1>Data Intern</h1>
+<form id="app" action="/submit" method="post">
+  <div><label for="fn">First Name *</label><input id="fn" name="fname" required></div>
+  <div><label for="ln">Last Name *</label><input id="ln" name="lname" required></div>
+  <div><input type="email" name="contact_email" aria-label="Email address"></div>
+  <div class="row"><span>Phone number</span><input type="tel" name="tel"></div>
+  <div><input name="li" placeholder="LinkedIn profile"></div>
+  <div><label for="why">Why do you want to work here?</label><textarea id="why" name="why"></textarea></div>
+  <div><label for="auth">Are you legally authorized to work in the United States?</label>
+    <select id="auth" name="auth"><option value="">Select…</option><option value="y">Yes</option><option value="n">No</option></select></div>
+  <fieldset><legend>Will you now or in the future require visa sponsorship?</legend>
+    <label><input type="radio" name="sponsor" value="1"> Yes</label>
+    <label><input type="radio" name="sponsor" value="0"> No</label></fieldset>
+  <div><label><input type="checkbox" name="agree"> I agree to the terms and conditions</label></div>
+  <div><label for="cv">Resume</label><input type="file" id="cv" name="cv"></div>
+  <input type="hidden" name="token" value="abc">
+  <button type="submit">Submit application</button>
+</form>
+<script>
+  window.submitted = false;
+  document.getElementById("app").addEventListener("submit", (e) => { e.preventDefault(); window.submitted = true; });
+</script>
+</body></html>

@@ -400,7 +400,7 @@ def test_dashboard_loads_and_renders_real_form(paths, monkeypatch):
     assert "Real form:" in page and "Will you require visa sponsorship?" in page
     assert '<option value="">(NEEDS_HUMAN: pick one)</option>' in page
     assert "Voluntary self-identification" in page and "DRAFT" in page
-    assert f"jobpilot autofill {job}" in page
+    assert "Fill the form for me" not in page  # only after you approve
     # Pick a sponsorship answer and tick a graduation option, then check they stuck.
     client.post(f"/jobs/{job}", data={"csrf": app.state.csrf_token, "action": "save", "draft_count": "0",
                                       "fv_gh:question_3": "No", "fv_gh:question_4[]": ["", "Fall 2027"]})
