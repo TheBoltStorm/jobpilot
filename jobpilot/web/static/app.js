@@ -17,6 +17,62 @@ document.addEventListener("DOMContentLoaded", () => {
     catch { if (body) { body.select(); } btn.textContent = "Select and copy"; }
   }));
 
+  // "/" jumps to the search box (unless you're typing somewhere).
+  const hot = document.querySelector("[data-hotkey='/']");
+  document.addEventListener("keydown", (e) => {
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) || document.activeElement.isContentEditable;
+    if (hot && e.key === "/" && !typing) { e.preventDefault(); hot.focus(); }
+    // Ctrl+Enter on a job page: Approve & next (the confirm box still has to be ticked).
+    const quick = document.querySelector("[data-hotkey-submit]");
+    if (quick && e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); quick.click(); }
+  });
+
+  // Applications pipeline: drag a card to another column to set its stage. You're the one moving it.
+  const board = document.querySelector(".kanban");
+  if (board) {
+    let dragged = null;
+    board.addEventListener("dragstart", (e) => {
+      dragged = e.target.closest(".kcard");
+      if (!dragged) return;
+      dragged.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", dragged.dataset.job);
+    });
+    board.addEventListener("dragend", () => {
+      if (dragged) dragged.classList.remove("dragging");
+      board.querySelectorAll(".kcol.over").forEach((c) => c.classList.remove("over"));
+    });
+    board.querySelectorAll(".kcol").forEach((col) => {
+      col.addEventListener("dragover", (e) => { e.preventDefault(); col.classList.add("over"); });
+      col.addEventListener("dragleave", (e) => { if (!col.contains(e.relatedTarget)) col.classList.remove("over"); });
+      col.addEventListener("drop", async (e) => {
+        e.preventDefault();
+        col.classList.remove("over");
+        if (!dragged || dragged.closest(".kcol") === col) return;
+        const from = dragged.closest(".kcol");
+        const body = new FormData();
+        body.append("csrf", board.dataset.csrf);
+        body.append("action", "outcome");
+        body.append("stage", col.dataset.stage);
+        const card = dragged;
+        try {
+          const r = await fetch(`/applied/${card.dataset.job}`, { method: "POST", body, headers: { "x-jobpilot-fetch": "1" } });
+          const data = await r.json();
+          if (!r.ok || !data.ok) throw new Error(data.error || "Couldn't change the stage.");
+          col.querySelector(".kcol-body").prepend(card);
+          card.dataset.stage = col.dataset.stage;
+          card.querySelectorAll(".kc-foot .tag:not(:first-child)").forEach((t) => t.remove());
+          for (const c of [from, col]) {
+            const n = c.querySelectorAll(".kcard").length;
+            c.querySelector(".count").textContent = n;
+            const empty = c.querySelector(".empty");
+            if (empty) empty.hidden = n > 0;
+          }
+        } catch (err) { alert(err.message); }
+      });
+    });
+  }
+
   // Review page: warn before leaving with unsaved edits; Reject asks to confirm.
   const review = document.getElementById("review");
   if (review) {

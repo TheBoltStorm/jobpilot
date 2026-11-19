@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Resumes{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Resumes and saved answers</h1>
+  <span class="sub">Everything here stays on your computer.</span></div>
+
+<div class="grid2">
+  <section class="card">
+    <h2>Resume versions</h2>
+    {% if rows %}
+    <table class="tight small">
+      <thead><tr><th>Name</th><th class="num">Used</th><th class="num">Heard back</th><th></th></tr></thead>
+      <tbody>
+      {% for r in rows %}
+      <tr><td><b>{{ r.label }}</b>{% if r.is_default %} <span class="tag q-qualify">default</span>{% endif %}
+          {% if '-for-job-' in r.label %} <span class="tag">tailored</span>{% endif %}
+          <div class="muted small">{{ r.path.replace('\\', '/').split('/')[-1] }} · added {{ r.added_at|day }}</div></td>
+        <td class="num">{{ used.get(r.label, 0) }}</td>
+        <td class="num">{% if rates.get(r.label) %}{{ rates[r.label].pct(rates[r.label].responded) }}%{% else %}–{% endif %}</td>
+        <td>{% if not r.is_default %}<form method="post" action="/resumes"><input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="hidden" name="label" value="{{ r.label }}"><button class="btn small-btn" name="action" value="default">Make default</button></form>{% endif %}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="muted">No resumes yet. Add one below or run <code>jobpilot onboard</code>.</p>{% endif %}
+
+    <h3>Add a version</h3>
+    <form method="post" action="/resumes" enctype="multipart/form-data" class="upload">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="file" name="file" accept=".pdf,.docx" required aria-label="Resume file">
+      <input name="label" placeholder="Short name, e.g. data-science" required aria-label="Version name">
+      <label class="check small"><input type="checkbox" name="make_default"> Make it the default</label>
+      <button class="btn primary small-btn" name="action" value="upload">Add</button>
+    </form>
+    <p class="muted small">Adding a version doesn't change your profile. Pick a version per application on its page,
+      or let a job's page suggest a tailored one.</p>
+  </section>
+
+  <section class="card" id="answers">
+    <h2>Saved answers</h2>
+    <p class="muted small">Answers you ticked "Remember" on an application. They fill in automatically when another
+      form asks the same question. Questions only you can answer (work authorization, salary, EEO...) are never saved.</p>
+    {% if answers %}
+    <ul class="list">
+      {% for q, a in answers.items() %}
+      <li><span class="grow"><b>{{ q }}</b><div class="muted small clip" title="{{ a }}">{{ a }}</div></span>
+        <form method="post" action="/resumes"><input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="hidden" name="question" value="{{ q }}"><button class="btn small-btn" name="action" value="forget">Forget</button></form></li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="muted">None yet.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

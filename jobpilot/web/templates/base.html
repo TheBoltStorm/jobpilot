@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}JobPilot{% endblock %} · JobPilot</title>
-  <link rel="stylesheet" href="/static/style.css">
-  <script src="/static/app.js" defer></script>
+  <link rel="stylesheet" href="/static/style.css?v={{ asset_v }}">
+  <script src="/static/app.js?v={{ asset_v }}" defer></script>
 </head>
 <body>
 <header class="top">
@@ -15,8 +15,9 @@
     <a href="/" {% if here == '/' %}aria-current="page"{% endif %}>Home</a>
     <a href="/jobs" {% if here in ('/jobs', '/gaps') %}aria-current="page"{% endif %}>Find jobs</a>
     <a href="/apply" {% if here == '/apply' or here.startswith('/jobs/') %}aria-current="page"{% endif %}>Apply</a>
-    <a href="/applied" {% if here == '/applied' %}aria-current="page"{% endif %}>Applied</a>
-    <a href="/settings" {% if here in ('/settings', '/runs') %}aria-current="page"{% endif %}>Settings</a>
+    <a href="/applied" {% if here == '/applied' %}aria-current="page"{% endif %}>Applications</a>
+    <a href="/insights" {% if here == '/insights' %}aria-current="page"{% endif %}>Insights</a>
+    <a href="/settings" {% if here in ('/settings', '/runs', '/resumes') %}aria-current="page"{% endif %}>Settings</a>
   </nav>
   <a class="btn primary small-btn add-btn" href="/add">+ Add a job</a>
 </header>

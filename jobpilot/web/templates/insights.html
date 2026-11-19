@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Insights{% endblock %}
+{% block content %}
+{% set o = stats.overall %}
+<div class="page-head"><h1>Insights</h1>
+  <span class="sub">It's a numbers game: keep the pipeline full and see what's turning into replies.</span></div>
+
+<div class="stat">
+  <div class="tile-static"><span class="n {{ 'ok' if pace.today >= goal else '' }}">{{ pace.today }}<small>/{{ goal }}</small></span>
+    <span class="l">applied today</span>
+    <div class="meter"><i style="width: {{ [100, (pace.today * 100 / goal)|round|int]|min }}%"></i></div></div>
+  <div class="tile-static"><span class="n">{{ pace.week }}</span><span class="l">this week</span></div>
+  <div class="tile-static"><span class="n">{{ pace.month }}</span><span class="l">this month</span></div>
+  <div class="tile-static"><span class="n">{{ pace.streak }}</span><span class="l">day streak</span></div>
+  <a href="/apply"><span class="n">{{ approved }}</span><span class="l">approved, ready to fill</span></a>
+  <a href="/apply"><span class="n">{{ waiting }}</span><span class="l">waiting for your review</span></a>
+</div>
+
+<div class="grid2">
+  <section class="card">
+    <h2>Applications per week</h2>
+    <div class="bars" role="img" aria-label="Applications per week, last 12 weeks">
+      {% for label, n in series %}
+      <div class="bar-col" title="Week of {{ label }}: {{ n }}"><span class="v">{{ n if n else '' }}</span>
+        <i style="height: {{ (n * 100 / peak)|round|int }}%"></i><span class="x">{{ label if loop.index0 % 2 == 0 or loop.last else '' }}</span></div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Funnel</h2>
+    {% set steps = [('Applied', o.applied), ('Heard back', o.responded), ('Interview', o.interviews), ('Offer', o.offers)] %}
+    <ul class="funnel">
+      {% for label, n in steps %}
+      <li><span class="fl">{{ label }}</span>
+        <span class="fb"><i style="width: {{ (n * 100 / (o.applied or 1))|round|int }}%"></i></span>
+        <span class="fn"><b>{{ n }}</b> <span class="muted small">{{ o.pct(n) if loop.index0 else 100 }}%</span></span></li>
+      {% endfor %}
+    </ul>
+    <p class="muted small">{% if stats.median_days_to_reply is not none %}Replies usually come after {{ stats.median_days_to_reply }} days.
+      {% endif %}{% if o.applied < 10 %}Only {{ o.applied }} applications so far; rates get meaningful after a few dozen.{% endif %}</p>
+  </section>
+</div>
+
+{% if o.applied %}
+<section class="card">
+  <h2>What's working</h2>
+  <p class="muted small">Reply, interview and offer rates for each group. Lean into what works.</p>
+  <div class="grid2">
+  {% for group, rates in stats.groups.items() if rates|length > 1 or group == 'Source' %}
+    <div>
+      <h3>{{ group }}</h3>
+      <table class="tight small">
+        <thead><tr><th></th><th class="num">Applied</th><th class="num">Heard back</th><th class="num">Interview</th><th class="num">Offer</th></tr></thead>
+        <tbody>{% for r in rates %}
+          <tr><td>{{ r.group }}</td><td class="num">{{ r.applied }}</td><td class="num">{{ r.pct(r.responded) }}%</td>
+            <td class="num">{{ r.pct(r.interviews) }}%</td><td class="num">{{ r.pct(r.offers) }}%</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>Stages</h2>
+  <ul class="chips">
+    {% for s in STAGES if stats.by_stage.get(s.key) %}
+    <li><a class="chip" href="/applied?view=list&stage={{ s.key }}">{{ s.label }} <b>{{ stats.by_stage[s.key] }}</b></a></li>
+    {% else %}<li class="muted small">No applications yet.</li>{% endfor %}
+  </ul>
+  <p class="small muted">Skills that would open up more jobs: <a href="/gaps">Skills to learn</a>.</p>
+</section>
+{% endblock %}

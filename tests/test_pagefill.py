@@ -167,7 +167,7 @@ def test_dashboard_pages(paths):
     app = create_app(paths)
     client = TestClient(app)
     home = client.get("/").text
-    for nav in ("Home", "Find jobs", "Apply", "Applied", "Settings", "+ Add a job", "Paste its link"):
+    for nav in ("Home", "Find jobs", "Apply", "Applications", "Insights", "Settings", "+ Add a job", "Paste its link"):
         assert nav in home, nav
     assert "Runs</a>" not in home and "Skill gaps</a>" not in home  # moved out of the main menu
     assert client.get("/apply").status_code == 200

@@ -88,6 +88,7 @@ class Settings(BaseModel):
     matching: MatchingSettings = Field(default_factory=MatchingSettings)
     autofill: AutofillSettings = Field(default_factory=AutofillSettings)
     followups: FollowupSettings = Field(default_factory=FollowupSettings)
+    daily_goal: int = Field(10, ge=1, le=200)  # applications a day you're aiming for (Home and Applications)
 
 
 HEADER = "# JobPilot settings. Safe to edit; delete the file to reset to defaults.\n\n"

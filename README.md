@@ -107,20 +107,36 @@ jobpilot dashboard          # opens http://127.0.0.1:8765 (only reachable from t
 jobpilot export applications.xlsx   # applications log (.csv or .xlsx), no answers included
 ```
 
-The dashboard has five pages:
+The dashboard has six main pages:
 
-- **Home.** What to do next, follow-ups due, good fits, and a box to paste a job link.
+- **Home.** What to do next, today's count against your daily goal (Settings, default 10) with your
+  streak, follow-ups due, good fits, and a box to paste a job link.
 - **Find jobs.** Tabs for jobs you qualify for, ones you're one requirement short of, all jobs, and
   skills to learn. Search, region chips, and more filters behind **Filters**.
 - **Apply.** Everything waiting on you. Each job's page shows:
   - its description, match score, skill gaps and minimum requirements;
   - every field autofill would type, next to where the value came from (your profile, your resume, or you);
   - DRAFT written answers and private notes;
-  - **Approve**, **Save edits**, **Skip** and **Reject** buttons, then **Fill the form for me**;
+  - **Approve & fill** (approve and open the form in one click), **Approve & next** (Ctrl+Enter: approve
+    and jump to the next job), **Approve**, **Save edits**, **Skip** and **Reject**;
+  - a **Remember** box next to answers you typed, so the same question gets that answer next time
+    (never for work authorization, sponsorship, salary, EEO, background or legal questions);
+  - **Already applied on the site yourself?** to log it without filling anything;
   - **Tailored resume**: a version of your resume reordered for this job (see below).
-- **Applied.** Stages, follow-up drafts and what's working (see below).
+
+  **Fill all approved, one by one** on Apply opens each approved Greenhouse/Lever form in turn. Each
+  one stops before Submit, as always.
+- **Applications.** Your submitted applications as a **Pipeline** (Applied, Screen, Assessment,
+  Interviewing, Offer, Closed; drag a card to change its stage) or a **List**. Tiles for applications,
+  assessments, interviews and offers, a **Coming up** week strip for next steps (click **Done** when
+  finished), search (press `/`), filters by field and type, and sorting. **+ Add** logs an application
+  you made somewhere else.
+- **Insights.** Your pace (today, this week, this month, streak), applications per week, the funnel
+  from applied to offer, and which sources, fields and resumes get replies.
 - **Settings.** Which jobs you see, follow-ups and the browser button. Sources, the matching engine,
-  rate limits and the run log are under **Advanced settings**.
+  rate limits and the run log are under **Advanced settings**. **Resumes** (from Settings) lists your
+  resume versions with how often each gets replies, lets you upload one or pick the default, and shows
+  the answers you asked JobPilot to remember.
 
 **+ Add a job** takes a link to any posting (`jobpilot add URL` from a terminal). Greenhouse, Lever and
 Ashby postings are read through their public APIs; for other sites you type the title and company.
@@ -180,7 +196,7 @@ application. Your other versions don't change.
 
 ## After you apply
 
-Once you've clicked Submit on the site and marked the job **Submitted**, it shows up on **Applied**.
+Once you've clicked Submit on the site and marked the job **Submitted**, it shows up on **Applications**.
 There you set its stage yourself (recruiter screen, interview, offer, not selected, no response, ...)
 and, if you like, the date of the next step. JobPilot never changes a stage on its own.
 

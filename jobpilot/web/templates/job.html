@@ -93,7 +93,10 @@
             {% elif f.state == 'human' %}<span class="state hu" title="{{ f.source }}">You</span>
             {% elif f.state == 'draft' %}<span class="state dr" title="{{ f.source }}">DRAFT</span>
             {% else %}<span class="state fi" title="{{ f.source }}">Profile</span>{% endif %}
-            {% if f.state == 'draft' %}<span class="src">{{ f.source }}</span>{% endif %}</td>
+            {% if f.state == 'draft' %}<span class="src">{{ f.source }}</span>{% endif %}
+            {% if editable and rememberable(f) and (f.state in ('human', 'needs_human', 'draft')) %}
+              <label class="remember" title="Fill this answer automatically when another form asks the same question">
+                <input type="checkbox" name="rem_{{ f.key }}"> Remember</label>{% endif %}</td>
         </tr>
       {% endfor %}
       </tbody>
@@ -137,14 +140,20 @@
       {% endif %}
       {% if st == 'custom_site' %}<p class="muted small">This isn't a Greenhouse, Lever or Ashby form, so autofill won't
         handle it. Approve to track it, then apply on the site yourself.</p>{% endif %}
-      <label class="check confirm"><input type="checkbox" name="confirm" value="yes"> I've checked every field and draft above</label>
+      <label class="check confirm"><input type="checkbox" name="confirm" value="yes" id="confirm-box"> I've checked every field and draft above</label>
       <div class="btns">
-        <button class="btn primary" name="action" value="approve">Approve</button>
+        {% if can_fill %}<button class="btn primary" name="action" value="approve_fill" title="Approve, then open the form and fill it">Approve &amp; fill</button>{% endif %}
+        <button class="btn {{ '' if can_fill else 'primary' }}" name="action" value="approve_next" data-hotkey-submit title="Ctrl+Enter">Approve &amp; next</button>
+        <button class="btn" name="action" value="approve">Approve</button>
         <button class="btn" name="action" value="save">Save edits</button>
         <button class="btn" name="action" value="skip" title="Come back later">Skip</button>
         <span class="reject"><input name="reason" placeholder="Reason (optional)" aria-label="Reject reason">
           <button class="btn danger" name="action" value="reject">Reject</button></span>
       </div>
+      <p class="muted small">Tick the box, then <kbd>Ctrl</kbd>+<kbd>Enter</kbd> approves and opens the next one.</p>
+      <details class="small elsewhere"><summary>Already applied on the site yourself?</summary>
+        <label class="check"><input type="checkbox" name="confirm_submitted" value="yes"> I applied to this job on the site myself</label>
+        <button class="btn small-btn" name="action" value="applied_elsewhere">Log it as applied</button></details>
     {% elif st in ('approved', 'filled') %}
       <p>{% if st == 'approved' %}Approved {{ app.approved_at|day }}. Changing anything above withdraws the approval.
         {% else %}The form was filled {{ app.filled_at|day }}.{% endif %}</p>

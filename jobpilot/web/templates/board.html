@@ -11,6 +11,9 @@
 </form>
 
 <div class="stat">
+  <a href="/insights" title="Your daily goal is in Settings"><span class="n{{ ' ok' if today_n >= goal else '' }}">{{ today_n }}<small>/{{ goal }}</small></span>
+    <span class="l">applied today{% if streak > 1 %} · {{ streak }}-day streak{% endif %}</span>
+    <span class="meter"><i style="width: {{ [100, (today_n * 100 / goal)|round|int]|min }}%"></i></span></a>
   <a href="/apply"><span class="n{{ ' ok' if review_n else '' }}">{{ review_n }}</span>
     <span class="l">jobs waiting for you to review</span></a>
   <a href="/jobs?show=qualify"><span class="n">{{ qual_counts.get('qualify', 0) }}</span>
@@ -18,7 +21,7 @@
   <a href="/applied#due"><span class="n{{ ' warn-text' if due_n else '' }}">{{ due_n }}</span>
     <span class="l">follow-ups to send</span></a>
   <a href="/applied"><span class="n">{{ counts.get('submitted', 0) }}</span>
-    <span class="l">applied · {{ responded }} heard back</span></a>
+    <span class="l">applied · {{ week_n }} this week · {{ responded }} heard back</span></a>
 </div>
 
 {% if counts.get('matched') %}

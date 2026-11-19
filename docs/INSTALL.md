@@ -129,8 +129,9 @@ terminal to stop it.
 | **Home** | What to do next: applications to review or submit, follow-ups due, and good fits. Paste a job link here to add it. |
 | **Find jobs** | Tabs for jobs **you qualify** for, ones you're **almost** qualified for, **all jobs**, and **skills to learn**. Search, pick a region, or open **Filters** for more. |
 | **Apply** | Everything waiting on you, grouped by what it needs: your answers, your OK, or your Submit click. |
-| **Applied** | Applications you've submitted, their stages, follow-up drafts and stats. |
-| **Settings** | Which jobs you see, follow-up timing, and the browser button. Sources, the matching engine and rate limits are under **Advanced settings**. |
+| **Applications** | Applications you've submitted, as a pipeline you drag cards across or a list. Tiles, a **Coming up** week strip, search (press `/`), filters and follow-up drafts. **+ Add** logs one you applied to elsewhere. |
+| **Insights** | Your pace against your daily goal, applications per week, the funnel to offers, and what gets replies. |
+| **Settings** | Which jobs you see, your daily goal, follow-up timing, the browser button, and **Resumes** (versions, the default, and answers you asked it to remember). Sources, the matching engine and rate limits are under **Advanced settings**. |
 
 **+ Add a job** (top right) takes a link to any posting you found. Greenhouse, Lever and Ashby postings
 are read automatically; for other sites you type the title and company. The job goes straight to **Apply**.
@@ -142,6 +143,10 @@ From a terminal: `jobpilot add https://...`
    work authorization, sponsorship, salary, demographic questions, legal consent, and anything
    JobPilot couldn't find in your profile. It never fills those from defaults. Edit anything, then click
    **Approve** (or **Skip** / **Reject**).
+   - Going fast? **Approve & next** (Ctrl+Enter) approves and opens the next job; **Approve & fill**
+     approves and starts filling the form right away. You still tick the confirm box each time.
+   - Tick **Remember** under an answer you typed (like "How did you hear about us?") and JobPilot uses
+     it for the same question next time. Protected questions can't be remembered.
 2. **Optional: tailor your resume.** On the job's page, **Suggest a tailored version** reorders your
    real content so the most relevant parts come first. Nothing is invented. Approve it to create a DOCX.
 3. **Fill the form.**
@@ -149,10 +154,13 @@ From a terminal: `jobpilot add https://...`
      and JobPilot fills exactly what you approved.
    - **Any other site:** click **Open the application**, then click the **JobPilot browser button**
      (set it up once, below).
+   - **Several approved?** On **Apply**, **Fill all approved, one by one** opens each Greenhouse/Lever
+     form in turn.
 4. **You submit.** JobPilot stops on the last page. Look it over, then click **Submit** on the site
    yourself. JobPilot can't submit for you, and there's no setting to make it.
 5. **Mark it.** Back on the job's page in the dashboard, tick the box and click **Mark as submitted**.
-   It now shows on **Applied**.
+   It now shows on **Applications**. Applied on a site yourself? Use **+ Add** on Applications (or
+   **Already applied on the site yourself?** on the job's page) to log it.
 
 ## The browser button (fill forms on any site)
 
@@ -179,8 +187,8 @@ The dashboard must be running for the button to work.
 
 ## 8. After you apply
 
-On **Applied**, update each application's stage as you hear back (screen, interview, offer, not
-selected...). When one has been quiet for a week, a **To do** item shows a short draft follow-up email.
+On **Applications**, drag each card to its new column as you hear back (or pick the stage in **List**
+view). Add a next step with a date and it appears under **Coming up**; click **Done** when it's over. When one has been quiet for a week, a **To do** item shows a short draft follow-up email.
 Copy it, send it from your own email, then click **I sent it**. JobPilot never sends email.
 
 ## Your daily routine

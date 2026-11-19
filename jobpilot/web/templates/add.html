@@ -16,8 +16,10 @@
     <label class="block">Company <input name="company" value="{{ f.company }}"></label>
     <label class="block">Location <span class="muted small">(optional)</span> <input name="location" value="{{ f.location }}"></label>
   </details>
+  <label class="check"><input type="checkbox" name="applied" {% if f.applied %}checked{% endif %}> I already applied to this one myself
+    <input type="date" name="applied_on" value="{{ f.applied_on or '' }}" aria-label="When you applied" class="w8"></label>
   <div class="btns"><button class="btn primary">Add job</button>
-    <span class="muted small">It goes straight to your Apply list. Nothing is filled or sent.</span></div>
+    <span class="muted small">Without the tick, it goes to your Apply list. With it, straight onto your Applications board.</span></div>
 </form>
 
 <p class="muted small">Looking at the posting right now? The <a href="/settings#browser-button">browser button</a>

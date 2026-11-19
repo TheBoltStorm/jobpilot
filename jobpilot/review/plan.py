@@ -398,3 +398,55 @@ def load_real_form(conn: sqlite3.Connection, job_id: int, profile: Profile, http
         transition(conn, job_id, "needs_human", actor="system", action="approval withdrawn",
                    note="the real form's questions were loaded; review and approve again")
     return prepare(conn, job_id, profile)
+
+
+def applied_elsewhere(conn: sqlite3.Connection, job_id: int, profile: Profile | None, on: str | None = None) -> None:
+    """You applied to this job yourself, outside JobPilot. Record it so it's tracked like any other.
+
+    Both steps are yours (actor="user"): the gate still only lets a person approve and mark submitted.
+    """
+    from jobpilot.review.outcomes import _valid_date
+
+    job = conn.execute("SELECT status FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    if not job:
+        raise GateError(f"no job {job_id}")
+    if job["status"] == "submitted":
+        return
+    when = (_valid_date(on) + "T12:00:00+00:00") if on else now_iso()
+    app = load_application(conn, job_id)
+    if app is None:
+        if profile is not None and job["status"] in PRE_APPROVAL:
+            app = prepare(conn, job_id, profile)
+        else:
+            app = Application(job_id, default_resume_label(conn, profile) if profile else "", [])
+            save_application(conn, app)
+    if job["status"] == "rejected":
+        transition(conn, job_id, "found", actor="user", action="reopened")
+    if job["status"] not in ("approved", "filled"):
+        transition(conn, job_id, "approved", actor="user", action="you applied outside JobPilot")
+        app = load_application(conn, job_id)
+        app.approved_at, app.approved_snapshot = when, app.snapshot()
+        save_application(conn, app)
+    transition(conn, job_id, "submitted", actor="user", action="you applied on the site yourself")
+    conn.execute("UPDATE applications SET submitted_at = ? WHERE job_id = ?", (when, job_id))
+
+
+def rememberable(f: PlanField) -> bool:
+    """Answers you can save for future applications: not protected, not a file, not a profile fact."""
+    from jobpilot.review.mapping import PROFILE_KEYS
+
+    return (not f.protected and not protected_category(f.label) and f.kind not in ("file",)
+            and f.maps_to not in PROFILE_KEYS and len(f.label) <= 200)
+
+
+def remember_answers(profile: Profile, answers: dict[str, str]) -> int:
+    """Save answers (question -> answer) to your profile's reusable short answers. Returns how many changed."""
+    n = 0
+    for q, a in answers.items():
+        q, a = q.strip(), a.strip()
+        if not q or not a or protected_category(q):
+            continue
+        if profile.short_answers.get(q) != a:
+            profile.short_answers[q] = a
+            n += 1
+    return n

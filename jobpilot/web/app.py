@@ -27,7 +27,7 @@ from jobpilot.forms import FORM_ATS
 from jobpilot.core import db
 from jobpilot.onboarding.profile import load_profile
 from jobpilot.matching.skills import load_taxonomy
-from jobpilot.review import export, outcomes, pagefill, plan, tailor
+from jobpilot.review import export, outcomes, pagefill, plan, tailor, tracker
 from jobpilot.review.status import LABELS, PRE_APPROVAL, STATUSES, GateError
 from jobpilot.settings import Settings, load_settings, save_settings
 
@@ -53,6 +53,12 @@ MESSAGES = {
     "tailor_discarded": "Discarded the tailored version.",
     "added": "Added. Check the answers below, then approve when they look right.",
     "already": "You already had this job. Here it is.",
+    "logged": "Logged as applied. It's on your Applications board now.",
+    "remembered": "Saved. Your remembered answers fill in automatically on future applications.",
+    "resume_added": "Added the resume version.",
+    "resume_default": "Default resume changed. New applications use it.",
+    "filling_queue": ("Filling your approved forms one at a time. Each opens in a browser window: check it, click "
+                      "Submit yourself, then close the window and the next one opens."),
     "filling": ("A browser window is opening with the form. JobPilot fills what you approved and stops on the "
                 "last page. You check it and click Submit yourself."),
 }
@@ -69,6 +75,8 @@ def create_app(paths: Paths) -> FastAPI:
     app.state.fill_errors = {}  # job id -> last error from a dashboard-started fill
     t_env = templates.env
     t_env.globals.update(STATUSES=STATUSES, LABELS=LABELS, csrf=token)
+    # Bumps when the CSS/JS change, so browsers don't keep an old cached copy after an update.
+    t_env.globals["asset_v"] = int(max(f.stat().st_mtime for f in (HERE / "static").iterdir()))
     t_env.filters["label"] = lambda s: LABELS.get(s, s)
     t_env.filters["day"] = lambda s: (s or "")[:10]
 
@@ -220,7 +228,14 @@ def create_app(paths: Paths) -> FastAPI:
             to_submit = conn.execute(
                 """SELECT j.id, j.title, j.company, j.status, j.ats FROM jobs j
                    WHERE j.status IN ('approved', 'filled') ORDER BY j.id DESC LIMIT 8""").fetchall()
+            from datetime import date, timedelta
+
+            today = date.today()
+            today_n = tracker.applied_on(conn, today)
+            week_n = tracker.applied_since(conn, today - timedelta(days=today.weekday()))
+            streak = tracker.streak(conn, today)
         return render(request, "board.html", due=due[:5], due_n=len(due), responded=responded, counts=counts,
+                      today_n=today_n, week_n=week_n, streak=streak, goal=settings().daily_goal,
                       total=sum(counts.values()), queue=queue, recent=recent, undescribed=undescribed,
                       qualify=qualify, qual_counts=qual_counts, to_submit=to_submit,
                       review_n=sum(counts.get(s, 0) for s in plan.QUEUE_STATUSES))
@@ -252,37 +267,137 @@ def create_app(paths: Paths) -> FastAPI:
             if action in ("mute", "unmute"):
                 outcomes.mute(conn, job_id, action == "mute")
                 return "saved"
+            if action == "next_done":
+                outcomes.set_next(conn, job_id, None, "")
+                return "saved"
         raise GateError(f"Unknown action {action!r}.")
 
     @app.get("/applied", response_class=HTMLResponse)
-    def applied(request: Request, stage: str = ""):
+    def applied(request: Request, view: str = "pipeline", stage: str = "", q: str = "", field: str = "",
+                type: str = "", sort: str = "recent"):
+        from datetime import date
+
         profile = load_profile(paths.profile)
         rules = outcomes.FollowupRules.from_settings(settings())
+        view = view if view in ("pipeline", "list") else "pipeline"
+        sort = sort if sort in tracker.SORTS else "recent"
         with db.connect(paths.db) as conn:
             with conn:
                 outcomes.ensure(conn)
+            refresh_indexes(conn, profile)
             due = outcomes.due(conn, rules)
             drafts = {d.job_id: outcomes.draft(d.kind, d.title, d.company, d.submitted, profile) for d in due}
-            soon = outcomes.upcoming(conn)
-            where, params = ("WHERE o.stage = ?", [stage]) if stage in outcomes.BY_KEY else ("", [])
-            rows = conn.execute(
-                f"""SELECT o.*, j.title, j.company, a.submitted_at, a.resume_label,
-                           (SELECT GROUP_CONCAT(area, ' · ') FROM job_places p WHERE p.job_id = j.id) areas
-                    FROM outcomes o JOIN jobs j ON j.id = o.job_id LEFT JOIN applications a ON a.job_id = j.id
-                    {where} ORDER BY a.submitted_at DESC""", params).fetchall()
+            rows = tracker.applications(conn, q.strip(), field, type, sort)
+            if stage in outcomes.BY_KEY:
+                rows = [r for r in rows if r["stage"] == stage]
+            types = [r[0] for r in conn.execute(
+                "SELECT DISTINCT role_type FROM jobs WHERE status = 'submitted' AND role_type != '' ORDER BY 1")]
+            tiles = tracker.tiles(conn)
+            week = tracker.week(conn)
+            today_n = tracker.applied_on(conn, date.today())
+        due_ids = {d.job_id for d in due}
+        filters = {"q": q, "field": field, "type": type, "sort": sort}
+        return render(request, "applied.html", rows=rows, board=tracker.board(rows), due=due, due_ids=due_ids,
+                      drafts=drafts, tiles=tiles, week=week, view=view, stage=stage, filters=filters, types=types,
+                      fields=FIELDS, STAGES=outcomes.STAGES, BY_KEY=outcomes.BY_KEY, COLUMN_OF=tracker.COLUMN_OF,
+                      avatar=tracker.avatar, rules=rules, today_n=today_n, goal=settings().daily_goal,
+                      today=date.today().isoformat())
+
+    @app.get("/applications")
+    def applications_alias(request: Request):
+        return RedirectResponse("/applied" + (f"?{request.url.query}" if request.url.query else ""), status_code=303)
+
+    @app.get("/insights", response_class=HTMLResponse)
+    def insights(request: Request):
+        from datetime import date, timedelta
+
+        with db.connect(paths.db) as conn:
+            with conn:
+                outcomes.ensure(conn)
+            refresh_indexes(conn)
             st = outcomes.stats(conn)
-        return render(request, "applied.html", rows=rows, due=due, drafts=drafts, soon=soon, stats=st,
-                      stage=stage, STAGES=outcomes.STAGES, BY_KEY=outcomes.BY_KEY, rules=rules)
+            series = tracker.weekly_series(conn, 12)
+            today = date.today()
+            pace = {"today": tracker.applied_on(conn, today),
+                    "week": tracker.applied_since(conn, today - timedelta(days=today.weekday())),
+                    "month": tracker.applied_since(conn, today.replace(day=1)),
+                    "streak": tracker.streak(conn, today)}
+            approved = conn.execute("SELECT COUNT(*) FROM jobs WHERE status IN ('approved', 'filled')").fetchone()[0]
+            waiting = conn.execute(f"""SELECT COUNT(*) FROM jobs WHERE status IN
+                                       ({','.join('?' * len(plan.QUEUE_STATUSES))})""", plan.QUEUE_STATUSES).fetchone()[0]
+        peak = max([n for _, n in series] + [1])
+        return render(request, "insights.html", stats=st, series=series, peak=peak, pace=pace, goal=settings().daily_goal,
+                      approved=approved, waiting=waiting, BY_KEY=outcomes.BY_KEY, STAGES=outcomes.STAGES)
+
+    # ------------------------------------------------------------ resumes
+
+    @app.get("/resumes", response_class=HTMLResponse)
+    def resumes_page(request: Request):
+        profile = load_profile(paths.profile)
+        with db.connect(paths.db) as conn:
+            rows = db.list_resumes(conn)
+            used = dict(conn.execute("""SELECT a.resume_label, COUNT(*) FROM applications a JOIN jobs j ON j.id = a.job_id
+                                        WHERE j.status = 'submitted' GROUP BY a.resume_label""").fetchall())
+            st = outcomes.stats(conn)
+        rates = {r.group: r for r in st["groups"].get("Resume", [])}
+        answers = profile.short_answers if profile else {}
+        return render(request, "resumes.html", rows=rows, used=used, rates=rates, answers=answers)
+
+    @app.post("/resumes")
+    async def resumes_post(request: Request):
+        from jobpilot.onboarding.resumes import ALLOWED, add_resume
+
+        form = await posted(request)
+        action = str(form.get("action", ""))
+        if action == "default":
+            with db.connect(paths.db) as conn:
+                with conn:
+                    if not db.set_default_resume(conn, str(form.get("label", ""))):
+                        return go("/resumes?" + urlencode({"err": "No resume version with that name."}))
+            return go("/resumes", "resume_default")
+        if action == "forget":
+            profile = profile_or_400()
+            profile.short_answers.pop(str(form.get("question", "")), None)
+            from jobpilot.onboarding.profile import save_profile
+
+            save_profile(profile, paths.profile)
+            return go("/resumes#answers", "saved")
+        upload = form.get("file")
+        label = str(form.get("label", "")).strip()
+        if not upload or not getattr(upload, "filename", "") or not label:
+            return go("/resumes?" + urlencode({"err": "Pick a PDF or DOCX file and give it a short name."}))
+        suffix = Path(upload.filename).suffix.lower()
+        if suffix not in ALLOWED:
+            return go("/resumes?" + urlencode({"err": "Resumes must be PDF or DOCX."}))
+        data = await upload.read()
+        if len(data) > 10 * 1024 * 1024:
+            return go("/resumes?" + urlencode({"err": "That file is over 10 MB."}))
+        fd, tmp = tempfile.mkstemp(suffix=suffix)
+        os.close(fd)
+        try:
+            Path(tmp).write_bytes(data)
+            add_resume(paths, tmp, label, make_default=form.get("make_default") == "on")
+        except (ValueError, OSError) as exc:
+            return go("/resumes?" + urlencode({"err": str(exc)}))
+        finally:
+            Path(tmp).unlink(missing_ok=True)
+        return go("/resumes", "resume_added")
 
     @app.post("/applied/{job_id}")
     async def applied_action(request: Request, job_id: int):
         form = await posted(request)
         back = str(form.get("back", "/applied"))
         back = back if back.startswith("/") and not back.startswith("//") else "/applied"
+        wants_json = request.headers.get("x-jobpilot-fetch") == "1"
         with db.connect(paths.db) as conn:
             try:
-                return go(back, outcome_action(conn, job_id, form))
+                key = outcome_action(conn, job_id, form)
+                if wants_json:
+                    return JSONResponse({"ok": True})
+                return go(back, key)
             except GateError as exc:
+                if wants_json:
+                    return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
                 return go(back + ("&" if "?" in back else "?") + urlencode({"err": str(exc)}))
 
     # ------------------------------------------------------------ jobs list
@@ -315,6 +430,38 @@ def create_app(paths: Paths) -> FastAPI:
 
     # ------------------------------------------------------------ apply: everything waiting on you
 
+    @app.post("/apply/fill-all")
+    async def fill_all(request: Request):
+        """Fill every approved Greenhouse/Lever form, one browser window after another."""
+        import threading
+
+        from jobpilot.autofill import FILLERS, run_autofill
+
+        await posted(request)
+        with db.connect(paths.db) as conn:
+            ids = [r[0] for r in conn.execute(
+                f"""SELECT j.id FROM jobs j LEFT JOIN matches m ON m.job_id = j.id
+                    WHERE j.status = 'approved' AND j.ats IN ({','.join('?' * len(FILLERS))})
+                    ORDER BY m.score DESC""", tuple(FILLERS))]
+        ids = [i for i in ids if i not in app.state.filling]
+        if not ids:
+            return go("/apply?" + urlencode({"err": "No approved Greenhouse or Lever forms waiting to be filled."}))
+        s = settings()
+        app.state.filling.update(ids)
+
+        def work():
+            for job_id in ids:
+                try:
+                    run_autofill(paths, job_id, "fill", profile=load_profile(paths.profile),
+                                 channel=s.autofill.browser_channel, slow_mo_ms=s.autofill.slow_mo_ms, log=lambda m: None)
+                except Exception as exc:
+                    app.state.fill_errors[job_id] = str(exc).splitlines()[0][:300] if str(exc) else type(exc).__name__
+                finally:
+                    app.state.filling.discard(job_id)
+
+        threading.Thread(target=work, daemon=True, name="fill-queue").start()
+        return go("/apply", "filling_queue")
+
     @app.get("/apply", response_class=HTMLResponse)
     def apply_page(request: Request):
         with db.connect(paths.db) as conn:
@@ -331,13 +478,15 @@ def create_app(paths: Paths) -> FastAPI:
             ("Ready for your OK", "JobPilot has an answer for every question. Check them and approve.",
              [r for r in rows if r["status"] in ("ready_to_fill", "matched", "custom_site")]),
         ]
-        return render(request, "apply.html", groups=groups, total=len(rows))
+        fillable = sum(1 for r in rows if r["status"] == "approved" and r["ats"] in FORM_ATS)
+        return render(request, "apply.html", groups=groups, total=len(rows), fillable=fillable,
+                      filling=bool(app.state.filling))
 
     # ------------------------------------------------------------ add a job from a link
 
     @app.get("/add", response_class=HTMLResponse)
-    def add_page(request: Request, url: str = ""):
-        return render(request, "add.html", f={"url": url}, manual=False)
+    def add_page(request: Request, url: str = "", applied: str = ""):
+        return render(request, "add.html", f={"url": url, "applied": applied == "1"}, manual=applied == "1")
 
     def _http():
         from jobpilot.core.http import PoliteClient
@@ -382,11 +531,17 @@ def create_app(paths: Paths) -> FastAPI:
         from jobpilot.sources.link import LinkError
 
         form = await posted(request)
-        f = {k: str(form.get(k, "")).strip() for k in ("url", "title", "company", "location")}
+        f = {k: str(form.get(k, "")).strip() for k in ("url", "title", "company", "location", "applied_on")}
+        f["applied"] = form.get("applied") == "on"
         with db.connect(paths.db) as conn:
             try:
                 job_id, new = add_job(conn, f["url"], title=f["title"], company=f["company"], location=f["location"])
-            except LinkError as exc:
+                if f["applied"]:
+                    with conn:
+                        plan.applied_elsewhere(conn, job_id, load_profile(paths.profile), f["applied_on"] or None)
+                        outcomes.ensure(conn)
+                    return go("/applied", "logged")
+            except (LinkError, GateError) as exc:
                 return render(request, "add.html", status_code=400, f=f, error=str(exc),
                               manual="title and company" in str(exc).lower() or bool(f["title"]))
         return go(f"/jobs/{job_id}", "added" if new else "already")
@@ -517,6 +672,7 @@ def create_app(paths: Paths) -> FastAPI:
                     qual=minimums.load(conn, job_id), job_areas=job_areas, tailored=tailored, tailor_moves=tailor.moves(tailored), job=job, match=match, skills=grouped, app=app_, events=events, sources=sources,
                     resumes=resumes, next_id=nxt, editable=job["status"] in (*PRE_APPROVAL, "approved", "filled"),
                     form=form_row, can_load_form=job["ats"] in FORM_ATS, can_fill=job["ats"] in FORM_ATS, run=run,
+                    rememberable=plan.rememberable,
                     run_steps=run_steps)
 
     def load_form_for(conn, job_id: int, profile) -> None:
@@ -572,7 +728,7 @@ def create_app(paths: Paths) -> FastAPI:
                 if not job:
                     raise HTTPException(404, "No such job.")
                 # Your edits are saved first (and kept) even if the action below is refused.
-                if action in ("save", "approve", "reject", "skip") and job["status"] in (
+                if action in ("save", "approve", "approve_next", "approve_fill", "reject", "skip") and job["status"] in (
                         *PRE_APPROVAL, "approved", "filled"):
                     grouped_vals: dict[str, list[str]] = {}
                     for k, v in form.multi_items():
@@ -582,8 +738,15 @@ def create_app(paths: Paths) -> FastAPI:
                     values = {k: "; ".join(x for x in vs if x.strip()) if len(vs) > 1 else vs[0]
                               for k, vs in grouped_vals.items()}
                     with conn:
-                        plan.save_answers(conn, job_id, profile, values, drafts_from(form), str(form.get("notes", "")),
-                                          str(form.get("resume", "")) or None)
+                        app_ = plan.save_answers(conn, job_id, profile, values, drafts_from(form),
+                                                 str(form.get("notes", "")), str(form.get("resume", "")) or None)
+                    # Answers you ticked "Remember" fill in automatically on future applications.
+                    remember = {f.label: f.value for f in app_.fields
+                                if form.get(f"rem_{f.key}") == "on" and plan.rememberable(f) and f.value}
+                    if remember and plan.remember_answers(profile, remember):
+                        from jobpilot.onboarding.profile import save_profile
+
+                        save_profile(profile, paths.profile)
                 elif action == "save" and "notes" in form:  # submitted: only notes can change
                     with conn:
                         conn.execute("UPDATE applications SET notes = ? WHERE job_id = ?",
@@ -601,11 +764,23 @@ def create_app(paths: Paths) -> FastAPI:
                     if action == "tailor_discard":
                         tailor.discard(conn, job_id)
                         return go(f"/jobs/{job_id}", "tailor_discarded")
-                    if action == "approve":
+                    if action in ("approve", "approve_next", "approve_fill"):
                         if form.get("confirm") != "yes":
                             raise GateError("Tick the box to confirm you've checked every field and draft first.")
                         plan.approve(conn, job_id, profile)
+                        if action == "approve_fill":
+                            conn.commit()
+                            start_fill(job_id)
+                            return go(f"/jobs/{job_id}", "filling")
+                        if action == "approve_next":
+                            nxt = next((r["id"] for r in plan.queue(conn, 2) if r["id"] != job_id), None)
+                            return go(f"/jobs/{nxt}" if nxt else "/apply", "approved")
                         return go(f"/jobs/{job_id}", "approved")
+                    if action == "applied_elsewhere":
+                        if form.get("confirm_submitted") != "yes":
+                            raise GateError("Tick the box to confirm you applied on the site yourself.")
+                        plan.applied_elsewhere(conn, job_id, profile)
+                        return go(f"/jobs/{job_id}", "submitted")
                     if action == "reject":
                         plan.reject(conn, job_id, str(form.get("reason", "")).strip())
                         return go(f"/jobs/{job_id}", "rejected")
@@ -751,6 +926,8 @@ def settings_from_form(current: Settings, form) -> Settings:
     data["request_timeout_seconds"] = num("request_timeout_seconds", float)
     data["max_age_days"] = num("max_age_days", int)
     data["filter_by_profile"] = form.get("filter_by_profile") == "on"
+    if "daily_goal" in form:
+        data["daily_goal"] = num("daily_goal", int)
     if "fu_first" in form:
         data["followups"] = {"first_after_days": num("fu_first", int), "then_every_days": num("fu_every", int),
                              "max_followups": num("fu_max", int), "quiet_after_days": num("fu_quiet", int)}
